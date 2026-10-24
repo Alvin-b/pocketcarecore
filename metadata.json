@@ -1,0 +1,6 @@
+{
+  "name": "CareConnect Telemed",
+  "description": "CareConnect Telemedicine platform with certified doctors, video consultations, automated vitals, e-prescriptions, ICD-11 coding, and KMPDC compliance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
