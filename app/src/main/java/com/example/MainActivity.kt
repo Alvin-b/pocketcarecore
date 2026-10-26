@@ -298,8 +298,13 @@ fun CareConnectApp(viewModel: CareViewModel) {
                 is CareScreen.DocHome -> DocHomeScreen(viewModel = viewModel)
                 is CareScreen.DocPatients -> DocPatientsScreen(viewModel = viewModel)
                 is CareScreen.DocPatient -> DocPatientChartScreen(viewModel = viewModel, patient = s.patient)
-                is CareScreen.DocChats -> ChatsListScreen(viewModel = viewModel)
-                is CareScreen.DocChat -> ChatScreen(viewModel = viewModel, doctorId = viewModel.myDoctorId.collectAsState().value ?: "d1")
+                is CareScreen.DocChats -> ChatsListScreen(viewModel = viewModel, isDoctor = true)
+                is CareScreen.DocChat -> {
+                    val doctorId = viewModel.myDoctorId.collectAsState().value
+                    if (doctorId != null) {
+                        ChatScreen(viewModel = viewModel, doctorId = doctorId, patientThread = s.patient)
+                    }
+                }
                 is CareScreen.DocSettings -> DocSettingsScreen(viewModel = viewModel)
                 is CareScreen.DocPrescribe -> DocPrescribeScreen(viewModel = viewModel, appointmentId = s.appointmentId, fromChat = s.fromChat)
                 is CareScreen.Triage -> TriageScreen(viewModel = viewModel)

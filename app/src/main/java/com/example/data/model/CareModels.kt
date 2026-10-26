@@ -110,6 +110,24 @@ data class LabOrder(
     val price: Int
 )
 
+enum class LabRequestStatus {
+    PENDING,
+    RESULT_SUBMITTED
+}
+
+data class ClinicianTestRequest(
+    val id: String,
+    val patient: String,
+    val doctorId: String,
+    val appointmentId: String?,
+    val testName: String,
+    val instructions: String,
+    val requestedDate: String,
+    val status: LabRequestStatus = LabRequestStatus.PENDING,
+    val resultText: String? = null,
+    val resultDate: String? = null
+)
+
 data class WalletEntry(
     val id: String,
     val label: String,

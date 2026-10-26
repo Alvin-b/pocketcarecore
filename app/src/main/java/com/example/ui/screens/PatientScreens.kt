@@ -220,6 +220,13 @@ fun PatientHomeScreen(viewModel: CareViewModel) {
 
     val nextAppt = appointments.firstOrNull { it.status == AppointmentStatus.UPCOMING }
     val nextDoctor = nextAppt?.let { a -> doctors.find { it.id == a.doctorId } }
+    val matchingDoctors = searchQuery.trim().takeIf { it.isNotEmpty() }?.let { query ->
+        val terms = query.split(Regex("\\s+")).filter { it.isNotBlank() }
+        doctors.filter { doctor ->
+            val searchable = "${doctor.name} ${doctor.specialty} ${doctor.bio}".lowercase(Locale.ROOT)
+            terms.all { term -> searchable.contains(term.lowercase(Locale.ROOT)) }
+        }
+    }.orEmpty()
 
     val allDoses = prescriptions.flatMap { p ->
         p.meds.flatMap { m -> m.times.map { t -> Pair(m, t) } }
@@ -301,6 +308,23 @@ fun PatientHomeScreen(viewModel: CareViewModel) {
             )
         }
 
+        if (searchQuery.isNotBlank()) {
+            item {
+                Text(
+                    text = if (matchingDoctors.isEmpty()) "No matching doctors found" else "Matching doctors",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            items(matchingDoctors, key = { "home-search-${it.id}" }) { doctor ->
+                DoctorRowCard(
+                    doctor = doctor,
+                    onClick = { viewModel.navigateTo(CareScreen.DoctorProfile(doctor.id)) }
+                )
+            }
+        }
+
         // 4 Action Tiles
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -344,7 +368,7 @@ fun PatientHomeScreen(viewModel: CareViewModel) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Science, contentDescription = null, tint = TelePrimary, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Book a lab test", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Tests & results", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 

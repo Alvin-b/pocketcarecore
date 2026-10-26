@@ -7,9 +7,11 @@ import com.example.data.local.CareData
 import com.example.data.model.Appointment
 import com.example.data.model.AppointmentStatus
 import com.example.data.model.CallType
+import com.example.data.model.ClinicianTestRequest
 import com.example.data.model.Doctor
 import com.example.data.model.HealthRecord
 import com.example.data.model.LabOrder
+import com.example.data.model.LabRequestStatus
 import com.example.data.model.Medication
 import com.example.data.model.Message
 import com.example.data.model.PatientAllergy
@@ -22,6 +24,10 @@ import com.example.video.CallDiagnostics
 import com.example.video.CallSession
 import com.example.video.CallState
 import com.example.video.VideoCallManager
+import com.example.wearable.UteWatchDevice
+import com.example.wearable.UteWatchRepository
+import com.example.wearable.UteWatchUiState
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,6 +72,10 @@ sealed class CareScreen {
 
 class CareViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val uteWatchRepository = UteWatchRepository(application.applicationContext)
+    val uteWatchUiState: StateFlow<UteWatchUiState> = uteWatchRepository.uiState
+    private var uteWatchSyncJob: Job? = null
+
     // Role: "patient" | "doctor" | null
     private val _role = MutableStateFlow<String?>("patient")
     val role: StateFlow<String?> = _role.asStateFlow()
@@ -90,7 +100,11 @@ class CareViewModel(application: Application) : AndroidViewModel(application) {
     )
     val patientProfiles: StateFlow<Map<String, PatientMedicalProfile>> = _patientProfiles.asStateFlow()
 
-    private val _messages = MutableStateFlow(CareData.initialMessages())
+    private val _messages = MutableStateFlow(
+        CareData.initialMessages().map { message ->
+            if (message.patient.isNullOrBlank()) message.copy(patient = _patientName.value) else message
+        }
+    )
     val messages: StateFlow<List<Message>> = _messages.asStateFlow()
 
     private val _records = MutableStateFlow(CareData.initialRecords())
@@ -98,17 +112,20 @@ class CareViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _vitals = MutableStateFlow<List<Vital>>(
         listOf(
-            Vital("v-init-1", "Heart rate", "74 bpm", "Today, 10:30 AM", "Resting smartwatch stream"),
-            Vital("v-init-2", "Blood pressure", "120/80 mmHg", "Today, 10:30 AM", "BLE cuff calibrated"),
-            Vital("v-init-3", "Temperature", "36.8 °C", "Today, 10:30 AM", "Core thermometer"),
-            Vital("v-init-4", "Glucose", "5.4 mmol/L", "Today, 08:15 AM", "Fasting ambulatory"),
-            Vital("v-init-5", "Weight", "68.5 kg", "Today, 08:00 AM", "Smart scale")
+            Vital("v-init-1", "Heart rate", "74 bpm", "Today, 10:30 AM", "Demo placeholder; not from a connected device"),
+            Vital("v-init-2", "Blood pressure", "120/80 mmHg", "Today, 10:30 AM", "Demo placeholder; not measured"),
+            Vital("v-init-3", "Temperature", "36.8 °C", "Today, 10:30 AM", "Demo placeholder; not measured"),
+            Vital("v-init-4", "Glucose", "5.4 mmol/L", "Today, 08:15 AM", "Demo placeholder; not measured"),
+            Vital("v-init-5", "Weight", "68.5 kg", "Today, 08:00 AM", "Demo placeholder; not measured")
         )
     )
     val vitals: StateFlow<List<Vital>> = _vitals.asStateFlow()
 
     private val _labOrders = MutableStateFlow<List<LabOrder>>(emptyList())
     val labOrders: StateFlow<List<LabOrder>> = _labOrders.asStateFlow()
+
+    private val _clinicianTestRequests = MutableStateFlow<List<ClinicianTestRequest>>(emptyList())
+    val clinicianTestRequests: StateFlow<List<ClinicianTestRequest>> = _clinicianTestRequests.asStateFlow()
 
     private val _walletBalance = MutableStateFlow(2500)
     val walletBalance: StateFlow<Int> = _walletBalance.asStateFlow()
@@ -251,6 +268,8 @@ class CareViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun resetDemoData() {
+        disconnectUteWatch()
+        uteWatchRepository.clearMetrics()
         _role.value = null
         _patientName.value = "Joy Kamau"
         _doctors.value = CareData.DOCTORS
@@ -258,10 +277,13 @@ class CareViewModel(application: Application) : AndroidViewModel(application) {
         _appointments.value = CareData.initialAppointments()
         _prescriptions.value = CareData.initialPrescriptions()
         _patientProfiles.value = mapOf("Joy Kamau" to CareData.initialProfile())
-        _messages.value = CareData.initialMessages()
+        _messages.value = CareData.initialMessages().map { message ->
+            if (message.patient.isNullOrBlank()) message.copy(patient = _patientName.value) else message
+        }
         _records.value = CareData.initialRecords()
         _vitals.value = emptyList()
         _labOrders.value = emptyList()
+        _clinicianTestRequests.value = emptyList()
         _walletBalance.value = 2500
         _walletEntries.value = CareData.initialWalletEntries()
         _acceptingPatients.value = true
@@ -270,7 +292,44 @@ class CareViewModel(application: Application) : AndroidViewModel(application) {
         showToast("Demo data reset")
     }
 
+    override fun onCleared() {
+        uteWatchSyncJob?.cancel()
+        uteWatchRepository.close()
+        super.onCleared()
+    }
+
     // Appointment Booking
+    fun isAcceptingPatients(doctorId: String): Boolean =
+        doctorId != _myDoctorId.value || _acceptingPatients.value
+
+    fun availableSlots(doctorId: String, date: String): List<String> {
+        if (!isAcceptingPatients(doctorId)) return emptyList()
+        val key = "$doctorId:$date"
+        val configuredSlots = _availability.value[key] ?: CareData.TIME_SLOTS.take(6)
+        val bookedSlots = _appointments.value
+            .filter { it.doctorId == doctorId && it.date == date && it.status == AppointmentStatus.UPCOMING }
+            .map { it.time }
+            .toSet()
+        return configuredSlots.filterNot { it in bookedSlots }
+    }
+
+    fun canBookAppointment(appointment: Appointment): Boolean =
+        appointment.time in availableSlots(appointment.doctorId, appointment.date)
+
+    fun saveUnpaidDemoBooking(appointment: Appointment): Boolean {
+        if (!canBookAppointment(appointment)) {
+            showToast("That clinician is not accepting this slot. Please choose another available time.")
+            return false
+        }
+        if (_appointments.value.any { it.id == appointment.id }) {
+            showToast("This booking has already been saved")
+            return false
+        }
+        _appointments.value = listOf(appointment.copy(paid = false)) + _appointments.value
+        showToast("Demo booking saved — unpaid; no payment was taken")
+        return true
+    }
+
     fun addAppointment(appointment: Appointment) {
         _appointments.value = listOf(appointment) + _appointments.value
     }
@@ -320,22 +379,9 @@ class CareViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Payment
-    fun processPayment(appointment: Appointment, method: String, phone: String) {
-        val doc = _doctors.value.find { it.id == appointment.doctorId } ?: return
-        val total = doc.fee + 50
-
-        if (method == "wallet") {
-            if (_walletBalance.value < total) {
-                showToast("Insufficient wallet balance. Please top up first.")
-                return
-            }
-            _walletBalance.value -= total
-            _walletEntries.value = listOf(
-                WalletEntry("w-${System.currentTimeMillis()}", "Consultation · ${doc.name}", total, CareData.todayISO(), "debit")
-            ) + _walletEntries.value
-        }
-
-        _appointments.value = listOf(appointment.copy(paid = true)) + _appointments.value
+    fun processPayment(appointment: Appointment, method: String, phone: String): Boolean {
+        showToast("${method.replaceFirstChar { it.uppercase() }} payment is unavailable in this demo. No payment was taken.")
+        return false
     }
 
     // Wallet
@@ -352,6 +398,78 @@ class CareViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Lab Orders
+    fun requestClinicianTest(patient: String, testName: String, instructions: String): Boolean {
+        val doctorId = _myDoctorId.value
+        if (_role.value != "doctor" || doctorId == null) {
+            showToast("Only the assigned demo clinician can request a test")
+            return false
+        }
+        if (_patientProfiles.value[patient]?.careTeamSharingConsent != true) {
+            showToast("Patient sharing consent is required before requesting a test")
+            return false
+        }
+        val relatedAppointment = _appointments.value
+            .filter {
+                it.patient == patient &&
+                    it.doctorId == doctorId &&
+                    it.status != AppointmentStatus.CANCELLED
+            }
+            .maxByOrNull { it.date + it.time }
+        if (relatedAppointment == null) {
+            showToast("A clinician-patient visit is required before requesting a test")
+            return false
+        }
+        if (testName.isBlank()) {
+            showToast("Enter the test name")
+            return false
+        }
+
+        val request = ClinicianTestRequest(
+            id = "lr-${System.currentTimeMillis()}",
+            patient = patient,
+            doctorId = doctorId,
+            appointmentId = relatedAppointment.id,
+            testName = testName.trim(),
+            instructions = instructions.trim(),
+            requestedDate = CareData.todayISO()
+        )
+        _clinicianTestRequests.value = listOf(request) + _clinicianTestRequests.value
+        showToast("Test request added to the patient's demo record")
+        return true
+    }
+
+    fun submitClinicianTestResult(requestId: String, resultText: String): Boolean {
+        val request = _clinicianTestRequests.value.find { it.id == requestId } ?: return false
+        if (_role.value != "doctor" || _myDoctorId.value != request.doctorId) {
+            showToast("Only the requesting demo clinician can submit this result")
+            return false
+        }
+        if (_patientProfiles.value[request.patient]?.careTeamSharingConsent != true) {
+            showToast("Patient sharing consent is required to submit a result")
+            return false
+        }
+        if (request.status != LabRequestStatus.PENDING) {
+            showToast("A result has already been submitted for this request")
+            return false
+        }
+        if (resultText.isBlank()) {
+            showToast("Enter a result summary")
+            return false
+        }
+
+        _clinicianTestRequests.value = _clinicianTestRequests.value.map {
+            if (it.id == requestId) {
+                it.copy(
+                    status = LabRequestStatus.RESULT_SUBMITTED,
+                    resultText = resultText.trim(),
+                    resultDate = CareData.todayISO()
+                )
+            } else it
+        }
+        showToast("Demo result submitted and visible to the patient")
+        return true
+    }
+
     fun bookLabOrder(testName: String, price: Int, date: String, homeCollection: Boolean, address: String?) {
         val total = price + (if (homeCollection) 300 else 0)
         if (_walletBalance.value < total) {
@@ -388,6 +506,29 @@ class CareViewModel(application: Application) : AndroidViewModel(application) {
         _vitals.value = _vitals.value.filter { it.id != vitalId }
     }
 
+    fun isUteBluetoothEnabled(): Boolean = uteWatchRepository.isBluetoothEnabled()
+
+    fun startUteWatchScan() = uteWatchRepository.startScan()
+
+    fun connectToUteWatch(device: UteWatchDevice) = uteWatchRepository.connect(device)
+
+    fun disconnectUteWatch() {
+        uteWatchSyncJob?.cancel()
+        uteWatchSyncJob = null
+        uteWatchRepository.disconnect()
+    }
+
+    fun syncUteWatchMetrics() {
+        if (uteWatchSyncJob?.isActive == true) return
+        uteWatchSyncJob = viewModelScope.launch {
+            uteWatchRepository.syncLastSevenDays()
+        }
+    }
+
+    fun clearUteWatchError() = uteWatchRepository.clearError()
+
+    fun setUteWatchError(message: String) = uteWatchRepository.setError(message)
+
     // Medications & Prescriptions
     fun updateMedication(prescriptionId: String, medicationId: String, transform: (Medication) -> Medication) {
         _prescriptions.value = _prescriptions.value.map { p ->
@@ -417,7 +558,35 @@ class CareViewModel(application: Application) : AndroidViewModel(application) {
         safetyAcknowledged: Boolean,
         fromChat: Boolean
     ) {
-        val appt = _appointments.value.find { it.id == appointmentId } ?: return
+        val clinicianId = _myDoctorId.value
+        if (_role.value != "doctor" || clinicianId == null) {
+            showToast("Only the assigned demo clinician can prescribe")
+            return
+        }
+        val appt = _appointments.value.find { it.id == appointmentId }
+        if (appt == null || appt.doctorId != clinicianId || appt.status == AppointmentStatus.CANCELLED) {
+            showToast("This visit is not available to the current clinician")
+            return
+        }
+        if (_patientProfiles.value[appt.patient]?.careTeamSharingConsent != true) {
+            showToast("Patient sharing consent is required before prescribing")
+            return
+        }
+        if (diagnosisTitle.isBlank() || meds.isEmpty() || meds.any {
+                it.name.isBlank() || it.dose.isBlank() || it.frequency <= 0 || it.days <= 0
+            }
+        ) {
+            showToast("Complete the diagnosis and valid medication details before saving")
+            return
+        }
+        val hasUnacknowledgedSevereAlert = safetyAlerts.any {
+            it.substringBefore(':').trim().equals("severe", ignoreCase = true)
+        } && !safetyAcknowledged
+        if (hasUnacknowledgedSevereAlert) {
+            showToast("Review and acknowledge severe safety alerts before prescribing")
+            return
+        }
+
         val newRx = Prescription(
             id = "p-${System.currentTimeMillis()}",
             doctorId = appt.doctorId,

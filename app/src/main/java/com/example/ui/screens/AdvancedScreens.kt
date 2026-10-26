@@ -255,8 +255,6 @@ fun VitalsScreen(viewModel: CareViewModel) {
     var hrField by remember { mutableStateOf("") }
     var noteField by remember { mutableStateOf("") }
 
-    var isBleConnected by remember { mutableStateOf(false) }
-
     BackHandler {
         viewModel.navigateBack()
     }
@@ -376,37 +374,7 @@ fun VitalsScreen(viewModel: CareViewModel) {
                 }
             }
 
-            // Pair a health device card
-            item {
-                CareCard(borderColor = TelePrimary.copy(alpha = 0.2f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Watch, contentDescription = null, tint = TelePrimary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Pair a health device", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Connect compatible Bluetooth LE heart-rate monitors, thermometers, or blood-pressure monitors using standard GATT services. Live readings fill the form above.",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    CareButton(
-                        text = if (isBleConnected) "Connected · Bluetooth Medical Sensor" else "Pair Bluetooth device",
-                        onClick = {
-                            isBleConnected = !isBleConnected
-                            if (isBleConnected) {
-                                hrField = "74"
-                                bpField = "120/80"
-                                tempField = "36.8"
-                                viewModel.showToast("Connected to Bluetooth health device; live values filled in.")
-                            }
-                        },
-                        variant = BtnVariant.SOFT,
-                        modifier = Modifier.fillMaxWidth().testTag("pair_ble_btn")
-                    )
-                }
-            }
+            item { UteWatchCard(viewModel = viewModel) }
 
             // Measurement history
             item {
@@ -450,6 +418,10 @@ fun VitalsScreen(viewModel: CareViewModel) {
 fun LabsScreen(viewModel: CareViewModel) {
     val labOrders by viewModel.labOrders.collectAsState()
     val walletBalance by viewModel.walletBalance.collectAsState()
+    val clinicianTestRequests by viewModel.clinicianTestRequests.collectAsState()
+    val patientName by viewModel.patientName.collectAsState()
+    val doctors by viewModel.doctors.collectAsState()
+    val patientTestRequests = clinicianTestRequests.filter { it.patient == patientName }
 
     var selectedPkg by remember { mutableStateOf(CareData.LAB_PACKAGES[0]) }
     var selectedDate by remember { mutableStateOf(CareData.todayISO(1)) }
@@ -479,6 +451,50 @@ fun LabsScreen(viewModel: CareViewModel) {
                 CareCard(backgroundColor = TelePrimarySoft, borderColor = TelePrimary.copy(alpha = 0.2f)) {
                     Text("Book a test", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text("Demo booking. Results and collection status are simulated.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            item {
+                CareCard(backgroundColor = TelePrimarySoft, borderColor = TelePrimary.copy(alpha = 0.2f)) {
+                    Text("Tests requested by your clinician", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Requests and clinician-entered demo results appear here.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            if (patientTestRequests.isEmpty()) {
+                item {
+                    CareCard {
+                        Text("No clinician-requested tests yet.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else {
+                items(patientTestRequests, key = { it.id }) { request ->
+                    val doctor = doctors.find { it.id == request.doctorId }
+                    CareCard {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(request.testName, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Text(
+                                text = if (request.status == com.example.data.model.LabRequestStatus.RESULT_SUBMITTED) "RESULT AVAILABLE" else "PENDING",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (request.status == com.example.data.model.LabRequestStatus.RESULT_SUBMITTED) TeleSuccess else TeleAccent
+                            )
+                        }
+                        Text("Requested ${request.requestedDate} · ${doctor?.name ?: "your clinician"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (request.instructions.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Instructions: ${request.instructions}", fontSize = 12.sp)
+                        }
+                        if (request.status == com.example.data.model.LabRequestStatus.RESULT_SUBMITTED) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Clinician result summary · ${request.resultDate.orEmpty()}", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            Text(request.resultText.orEmpty(), fontSize = 12.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Demo entry only. Contact your clinician to discuss the result.", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Text("Awaiting a result entry from your clinician.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
             }
 

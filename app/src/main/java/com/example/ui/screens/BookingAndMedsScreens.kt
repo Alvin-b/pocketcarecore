@@ -109,6 +109,9 @@ fun BookAppointmentScreen(
 ) {
     val doctors by viewModel.doctors.collectAsState()
     val patientName by viewModel.patientName.collectAsState()
+    val availability by viewModel.availability.collectAsState()
+    val appointments by viewModel.appointments.collectAsState()
+    val acceptingPatients by viewModel.acceptingPatients.collectAsState()
     val doctor = doctors.find { it.id == doctorId } ?: return
 
     val days = remember { (0..6).map { CareData.todayISO(it) } }
@@ -116,6 +119,11 @@ fun BookAppointmentScreen(
     var selectedTime by remember { mutableStateOf("") }
     var consultationType by remember { mutableStateOf(CallType.VIDEO) }
     var reasonText by remember { mutableStateOf(prefillReason ?: "") }
+    val openSlots = viewModel.availableSlots(doctorId, selectedDate)
+
+    LaunchedEffect(availability, appointments, acceptingPatients, doctorId, selectedDate, selectedTime) {
+        if (selectedTime.isNotBlank() && selectedTime !in openSlots) selectedTime = ""
+    }
 
     BackHandler {
         viewModel.navigateBack()
@@ -204,19 +212,25 @@ fun BookAppointmentScreen(
             item {
                 Text("Time", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 Spacer(modifier = Modifier.height(8.dp))
+                if (!viewModel.isAcceptingPatients(doctorId)) {
+                    Text("This clinician is not accepting appointments right now.", fontSize = 12.sp, color = TeleMuted)
+                } else if (openSlots.isEmpty()) {
+                    Text("No available times on this date.", fontSize = 12.sp, color = TeleMuted)
+                }
                 val chunks = CareData.TIME_SLOTS.chunked(4)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     chunks.forEach { rowSlots ->
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             rowSlots.forEach { slot ->
                                 val isSelected = selectedTime == slot
+                                val slotAvailable = slot in openSlots
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(if (isSelected) TelePrimary else MaterialTheme.colorScheme.surface)
+                                        .background(if (isSelected) TelePrimary else if (slotAvailable) MaterialTheme.colorScheme.surface else TeleMuted.copy(alpha = 0.35f))
                                         .border(1.dp, if (isSelected) TelePrimary else TeleBorder, RoundedCornerShape(12.dp))
-                                        .clickable { selectedTime = slot }
+                                        .clickable(enabled = slotAvailable) { selectedTime = slot }
                                         .padding(vertical = 10.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -224,7 +238,7 @@ fun BookAppointmentScreen(
                                         text = slot,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                        color = if (isSelected) Color.White else if (slotAvailable) MaterialTheme.colorScheme.onSurface else TeleMuted
                                     )
                                 }
                             }
@@ -295,7 +309,7 @@ fun BookAppointmentScreen(
                 .padding(horizontal = 18.dp, vertical = 12.dp)
         ) {
             CareButton(
-                text = "Continue to payment · ${CareData.formatKES(doctor.fee)}",
+                text = "Review booking · ${CareData.formatKES(doctor.fee)} (unpaid)",
                 onClick = {
                     val appt = Appointment(
                         id = "a-${System.currentTimeMillis()}",
@@ -308,9 +322,13 @@ fun BookAppointmentScreen(
                         status = AppointmentStatus.UPCOMING,
                         paid = false
                     )
-                    viewModel.navigateTo(CareScreen.Pay(appt))
+                    if (viewModel.canBookAppointment(appt)) {
+                        viewModel.navigateTo(CareScreen.Pay(appt))
+                    } else {
+                        viewModel.showToast("That slot is no longer available. Choose another time.")
+                    }
                 },
-                enabled = selectedTime.isNotBlank() && reasonText.isNotBlank(),
+                enabled = selectedTime in openSlots && reasonText.isNotBlank(),
                 variant = BtnVariant.PRIMARY,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -326,11 +344,8 @@ fun PaymentScreen(
     appointment: Appointment
 ) {
     val doctors by viewModel.doctors.collectAsState()
-    val walletBalance by viewModel.walletBalance.collectAsState()
     val doctor = doctors.find { it.id == appointment.doctorId } ?: return
 
-    var method by remember { mutableStateOf("mpesa") }
-    var phone by remember { mutableStateOf("0712 345 678") }
     var isBusy by remember { mutableStateOf(false) }
     var isDone by remember { mutableStateOf(false) }
 
@@ -359,10 +374,10 @@ fun PaymentScreen(
                 Icon(Icons.Default.Check, contentDescription = null, tint = TeleSuccess, modifier = Modifier.size(44.dp))
             }
             Spacer(modifier = Modifier.height(20.dp))
-            Text("You're booked!", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Demo booking saved — unpaid", fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "${doctor.name} will call you by ${appointment.type.name.lowercase()} on ${appointment.date} at ${appointment.time}. We'll remind you 10 minutes before.",
+                text = "No payment was taken. ${doctor.name} is scheduled for ${appointment.type.name.lowercase()} on ${appointment.date} at ${appointment.time}. This is an unpaid demo booking.",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -384,7 +399,7 @@ fun PaymentScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        CareHeader(title = "Payment", onBack = { viewModel.navigateBack() })
+        CareHeader(title = "Payment unavailable", onBack = { viewModel.navigateBack() })
 
         LazyColumn(
             modifier = Modifier
@@ -396,7 +411,7 @@ fun PaymentScreen(
             item {
                 CareCard {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Consultation", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Consultation estimate", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(CareData.formatKES(doctor.fee), fontSize = 13.sp)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
@@ -408,7 +423,7 @@ fun PaymentScreen(
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(TeleBorder))
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Total", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Estimated total · not charged", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Text(CareData.formatKES(total), fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TelePrimary)
                     }
                 }
@@ -418,8 +433,7 @@ fun PaymentScreen(
             item {
                 // M-Pesa
                 CareCard(
-                    borderColor = if (method == "mpesa") TelePrimary else TeleBorder,
-                    onClick = { method = "mpesa" }
+                    borderColor = TeleBorder
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -430,15 +444,15 @@ fun PaymentScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("M-Pesa", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("Pay via STK push", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("M-Pesa · unavailable", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("No STK push integration is connected", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Box(
                             modifier = Modifier
                                 .size(18.dp)
                                 .clip(CircleShape)
-                                .border(2.dp, if (method == "mpesa") TelePrimary else TeleBorder, CircleShape)
-                                .background(if (method == "mpesa") TelePrimary else Color.Transparent)
+                                .border(2.dp, TeleBorder, CircleShape)
+                                .background(Color.Transparent)
                         )
                     }
                 }
@@ -447,8 +461,7 @@ fun PaymentScreen(
             item {
                 // Card
                 CareCard(
-                    borderColor = if (method == "card") TelePrimary else TeleBorder,
-                    onClick = { method = "card" }
+                    borderColor = TeleBorder
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -459,15 +472,15 @@ fun PaymentScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Card", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("Visa / Mastercard", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Card · unavailable", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("No card processor is connected", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Box(
                             modifier = Modifier
                                 .size(18.dp)
                                 .clip(CircleShape)
-                                .border(2.dp, if (method == "card") TelePrimary else TeleBorder, CircleShape)
-                                .background(if (method == "card") TelePrimary else Color.Transparent)
+                                .border(2.dp, TeleBorder, CircleShape)
+                                .background(Color.Transparent)
                         )
                     }
                 }
@@ -476,8 +489,7 @@ fun PaymentScreen(
             item {
                 // Health Wallet
                 CareCard(
-                    borderColor = if (method == "wallet") TelePrimary else TeleBorder,
-                    onClick = { method = "wallet" }
+                    borderColor = TeleBorder
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -488,53 +500,23 @@ fun PaymentScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Health wallet", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("Balance ${CareData.formatKES(walletBalance)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Health wallet · demo only", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Demo balance cannot be used as a real payment", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Box(
                             modifier = Modifier
                                 .size(18.dp)
                                 .clip(CircleShape)
-                                .border(2.dp, if (method == "wallet") TelePrimary else TeleBorder, CircleShape)
-                                .background(if (method == "wallet") TelePrimary else Color.Transparent)
+                                .border(2.dp, TeleBorder, CircleShape)
+                                .background(Color.Transparent)
                         )
-                    }
-                }
-            }
-
-            if (method == "mpesa") {
-                item {
-                    CareField(label = "M-Pesa phone number") {
-                        OutlinedTextField(
-                            value = phone,
-                            onValueChange = { phone = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(14.dp)
-                        )
-                    }
-                }
-            } else if (method == "card") {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = "4242 4242 4242 4242",
-                            onValueChange = {},
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(14.dp)
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(value = "12/28", onValueChange = {}, modifier = Modifier.weight(1f), singleLine = true, shape = RoundedCornerShape(14.dp))
-                            OutlinedTextField(value = "123", onValueChange = {}, modifier = Modifier.weight(1f), singleLine = true, shape = RoundedCornerShape(14.dp))
-                        }
                     }
                 }
             }
 
             item {
                 Text(
-                    text = "Demo mode — no real money is charged.",
+                    text = "Payment is not available in this demo. Saving a booking below will not charge you and will leave it marked unpaid.",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -549,12 +531,12 @@ fun PaymentScreen(
                 .padding(18.dp)
         ) {
             CareButton(
-                text = if (isBusy) "Processing…" else "Pay ${CareData.formatKES(total)}",
+                text = if (isBusy) "Saving…" else "Save unpaid demo booking",
                 onClick = {
                     isBusy = true
-                    viewModel.processPayment(appointment, method, phone)
+                    val saved = viewModel.saveUnpaidDemoBooking(appointment)
                     isBusy = false
-                    isDone = true
+                    isDone = saved
                 },
                 enabled = !isBusy,
                 variant = BtnVariant.PRIMARY,
@@ -657,6 +639,10 @@ fun AppointmentsScreen(viewModel: CareViewModel) {
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(a.reason, fontSize = 12.sp)
+                    if (!a.paid) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("UNPAID · demo booking", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TeleDestructive)
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -924,11 +910,21 @@ fun MedsScreen(viewModel: CareViewModel) {
 }
 
 @Composable
-fun ChatsListScreen(viewModel: CareViewModel) {
+fun ChatsListScreen(viewModel: CareViewModel, isDoctor: Boolean = false) {
     val doctors by viewModel.doctors.collectAsState()
     val messages by viewModel.messages.collectAsState()
+    val role by viewModel.role.collectAsState()
+    val myDoctorId by viewModel.myDoctorId.collectAsState()
+    val patientName by viewModel.patientName.collectAsState()
 
-    val doctorIds = messages.map { it.doctorId }.distinct()
+    val clinicianInbox = isDoctor || role == "doctor"
+    val threadKeys = if (clinicianInbox) {
+        messages.filter { it.doctorId == myDoctorId }
+            .mapNotNull { message -> message.patient?.takeIf { it.isNotBlank() }?.let { patient -> message.doctorId to patient } }
+            .distinct()
+    } else {
+        messages.filter { it.patient == patientName }.map { it.doctorId to patientName }.distinct()
+    }
 
     Column(
         modifier = Modifier
@@ -937,31 +933,35 @@ fun ChatsListScreen(viewModel: CareViewModel) {
             .padding(horizontal = 18.dp, vertical = 8.dp)
             .testTag("chats_screen")
     ) {
-        Text("Messages", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(if (clinicianInbox) "Patient messages" else "Messages", fontSize = 22.sp, fontWeight = FontWeight.Bold)
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        if (doctorIds.isEmpty()) {
+        if (threadKeys.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Open a doctor's profile to start a conversation.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (clinicianInbox) "Patient messages will appear here." else "Open a doctor's profile to start a conversation.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(doctorIds) { docId ->
+                items(threadKeys) { (docId, patient) ->
                     val doc = doctors.find { it.id == docId } ?: return@items
-                    val lastMsg = messages.filter { it.doctorId == docId }.lastOrNull()
+                    val lastMsg = messages.lastOrNull { it.doctorId == docId && it.patient == patient }
+                    val title = if (clinicianInbox) patient else doc.name
 
                     CareCard(
-                        onClick = { viewModel.navigateTo(CareScreen.Chat(docId)) }
+                        onClick = {
+                            if (clinicianInbox) viewModel.navigateTo(CareScreen.DocChat(patient))
+                            else viewModel.navigateTo(CareScreen.Chat(docId))
+                        }
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            CareAvatar(name = doc.name, photoRes = doc.photoRes, size = 48.dp)
+                            CareAvatar(name = title, photoRes = if (clinicianInbox) null else doc.photoRes, size = 48.dp)
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(doc.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text(lastMsg?.text ?: "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             }
                             Text(lastMsg?.at ?: "", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -976,14 +976,19 @@ fun ChatsListScreen(viewModel: CareViewModel) {
 @Composable
 fun ChatScreen(
     viewModel: CareViewModel,
-    doctorId: String
+    doctorId: String,
+    patientThread: String? = null
 ) {
     val doctors by viewModel.doctors.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val patientName by viewModel.patientName.collectAsState()
+    val role by viewModel.role.collectAsState()
     val doc = doctors.find { it.id == doctorId } ?: return
 
-    val thread = messages.filter { it.doctorId == doctorId }
+    val clinicianView = role == "doctor" || patientThread != null
+    val threadPatient = patientThread ?: patientName
+    val thread = messages.filter { it.doctorId == doctorId && it.patient == threadPatient }
+    val title = if (clinicianView) threadPatient else doc.name
     var inputMessage by remember { mutableStateOf("") }
 
     BackHandler {
@@ -996,9 +1001,9 @@ fun ChatScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         CareHeader(
-            title = doc.name,
+            title = title,
             onBack = { viewModel.navigateBack() },
-            right = { CareAvatar(name = doc.name, photoRes = doc.photoRes, size = 36.dp) }
+            right = { CareAvatar(name = title, photoRes = if (clinicianView) null else doc.photoRes, size = 36.dp) }
         )
 
         LazyColumn(
@@ -1009,7 +1014,7 @@ fun ChatScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(thread) { m ->
-                val isMe = m.from == "patient"
+                val isMe = if (clinicianView) m.from == "doctor" else m.from == "patient"
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = if (isMe) Alignment.End else Alignment.Start
@@ -1064,7 +1069,7 @@ fun ChatScreen(
             Spacer(modifier = Modifier.width(8.dp))
             IconButton(
                 onClick = {
-                    viewModel.sendMessage(doctorId, patientName, "patient", inputMessage)
+                    viewModel.sendMessage(doctorId, threadPatient, if (clinicianView) "doctor" else "patient", inputMessage)
                     inputMessage = ""
                 },
                 modifier = Modifier.size(44.dp).clip(CircleShape).background(TelePrimary).testTag("chat_send_btn")

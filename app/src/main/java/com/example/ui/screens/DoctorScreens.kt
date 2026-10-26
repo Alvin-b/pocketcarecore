@@ -183,11 +183,16 @@ fun CallConsultationScreen(
 
     val handleEndCall = {
         viewModel.endVideoCall()
-        viewModel.markAppointmentCompleted(appointmentId)
-        if (role == "doctor") {
-            viewModel.navigateTo(CareScreen.DocPrescribe(appointmentId))
+        if (callState == CallState.CONNECTED) {
+            viewModel.markAppointmentCompleted(appointmentId)
+            if (role == "doctor") {
+                viewModel.navigateTo(CareScreen.DocPrescribe(appointmentId))
+            } else {
+                viewModel.navigateTo(CareScreen.Rate(appointmentId))
+            }
         } else {
-            viewModel.navigateTo(CareScreen.Rate(appointmentId))
+            viewModel.showToast("No call was established; the appointment remains scheduled.")
+            viewModel.navigateTo(CareScreen.Appointments)
         }
     }
 
@@ -197,6 +202,38 @@ fun CallConsultationScreen(
 
     val mm = String.format("%02d:%02d", secondsElapsed / 60, secondsElapsed % 60)
     val isVideo = appt.type == CallType.VIDEO && callState == CallState.CONNECTED
+
+    if (callState != CallState.CONNECTED) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(Icons.Default.Warning, contentDescription = null, tint = TeleDestructive, modifier = Modifier.size(40.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Secure call unavailable", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "This build has no server-authorized VideoSDK room session. No call was started, and this appointment has not been completed.",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            CareButton(
+                text = "Return to visits",
+                onClick = {
+                    viewModel.endVideoCall()
+                    viewModel.navigateTo(CareScreen.Appointments)
+                },
+                variant = BtnVariant.PRIMARY,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        return
+    }
 
     Box(
         modifier = Modifier
@@ -213,11 +250,11 @@ fun CallConsultationScreen(
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.mediaPlaybackRequiresUserGesture = false
-                        settings.allowFileAccess = true
+                        settings.allowFileAccess = false
                         settings.cacheMode = WebSettings.LOAD_DEFAULT
                         webChromeClient = object : WebChromeClient() {
                             override fun onPermissionRequest(request: PermissionRequest?) {
-                                request?.grant(request.resources)
+                                request?.deny()
                             }
                         }
                         webViewClient = WebViewClient()
@@ -1037,14 +1074,41 @@ fun DocPatientChartScreen(
     val profiles by viewModel.patientProfiles.collectAsState()
     val prescriptions by viewModel.prescriptions.collectAsState()
     val appointments by viewModel.appointments.collectAsState()
+    val myDoctorId by viewModel.myDoctorId.collectAsState()
+    val clinicianTestRequests by viewModel.clinicianTestRequests.collectAsState()
     val currentProfile = profiles[patient] ?: PatientMedicalProfile(patient, emptyList(), false)
+    val patientAppointmentIds = appointments.filter { it.patient == patient }.map { it.id }.toSet()
+    val patientPrescriptions = prescriptions.filter { it.appointmentId in patientAppointmentIds }
+    val patientTestRequests = clinicianTestRequests.filter { it.patient == patient && it.doctorId == myDoctorId }
 
     var newAllergen by remember { mutableStateOf("") }
     var newReaction by remember { mutableStateOf("") }
     var newSeverity by remember { mutableStateOf("Moderate") }
+    var requestedTestName by remember { mutableStateOf("") }
+    var requestedTestInstructions by remember { mutableStateOf("") }
 
     BackHandler {
         viewModel.navigateBack()
+    }
+
+    if (!currentProfile.careTeamSharingConsent) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            CareHeader(title = "Patient chart", onBack = { viewModel.navigateBack() })
+            CareCard(modifier = Modifier.padding(18.dp)) {
+                Text("Chart unavailable", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "This patient has not enabled care-team sharing consent. Chart information is hidden in this screen.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
     }
 
     Column(
@@ -1114,12 +1178,98 @@ fun DocPatientChartScreen(
                 }
             }
 
+            item {
+                Text("Tests requested for this patient", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+
+            if (patientTestRequests.isEmpty()) {
+                item {
+                    CareCard {
+                        Text("No clinician test requests yet.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else {
+                items(patientTestRequests, key = { it.id }) { request ->
+                    var resultInput by remember(request.id) { mutableStateOf("") }
+                    CareCard {
+                        Text(request.testName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("Requested ${request.requestedDate}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (request.instructions.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(request.instructions, fontSize = 12.sp)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        if (request.status == com.example.data.model.LabRequestStatus.RESULT_SUBMITTED) {
+                            Text("Result submitted · ${request.resultDate.orEmpty()}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = TeleSuccess)
+                            Text(request.resultText.orEmpty(), fontSize = 12.sp)
+                        } else {
+                            OutlinedTextField(
+                                value = resultInput,
+                                onValueChange = { resultInput = it },
+                                label = { Text("Result summary (demo)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            CareButton(
+                                text = "Submit result to patient",
+                                onClick = {
+                                    if (viewModel.submitClinicianTestResult(request.id, resultInput)) resultInput = ""
+                                },
+                                enabled = resultInput.isNotBlank(),
+                                variant = BtnVariant.PRIMARY,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                CareCard {
+                    Text("Request a test", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Demo workflow only. The patient completes testing outside this app; no laboratory is connected.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = requestedTestName,
+                        onValueChange = { requestedTestName = it },
+                        label = { Text("Test name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = requestedTestInstructions,
+                        onValueChange = { requestedTestInstructions = it },
+                        label = { Text("Instructions (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CareButton(
+                        text = "Add test request",
+                        onClick = {
+                            if (viewModel.requestClinicianTest(patient, requestedTestName, requestedTestInstructions)) {
+                                requestedTestName = ""
+                                requestedTestInstructions = ""
+                            }
+                        },
+                        enabled = requestedTestName.isNotBlank(),
+                        variant = BtnVariant.PRIMARY,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
             // Diagnoses & Meds from all clinicians
             item {
                 Text("Prescriptions & Diagnoses", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
 
-            items(prescriptions) { rx ->
+            items(patientPrescriptions) { rx ->
                 CareCard {
                     Text("Diagnosis: ${rx.diagnosis}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     Text("Date: ${rx.date}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1153,30 +1303,62 @@ fun DocPrescribeScreen(
 ) {
     val appointments by viewModel.appointments.collectAsState()
     val profiles by viewModel.patientProfiles.collectAsState()
+    val prescriptions by viewModel.prescriptions.collectAsState()
     val appt = appointments.find { it.id == appointmentId } ?: return
     val profile = profiles[appt.patient]
+    val patientAppointmentIds = remember(appointments, appt.patient) {
+        appointments.filter { it.patient == appt.patient }.map { it.id }.toSet()
+    }
+    val currentActiveMeds = remember(prescriptions, patientAppointmentIds) {
+        prescriptions
+            .filter { it.appointmentId in patientAppointmentIds }
+            .flatMap { it.meds }
+            .filter { it.status == "active" }
+    }
 
     var diagnosisText by remember { mutableStateOf("") }
     var clinicalNotesText by remember { mutableStateOf("") }
     var selectedDiagnosisCode by remember { mutableStateOf<String?>(null) }
     var showDiagnosisSuggestions by remember { mutableStateOf(false) }
+    var frequencyInputs by remember { mutableStateOf(mapOf<String, String>()) }
+    var durationInputs by remember { mutableStateOf(mapOf<String, String>()) }
 
     var meds by remember {
         mutableStateOf(
             listOf(
-                Medication(id = "m-${System.currentTimeMillis()}", name = "", dose = "1 tablet", frequency = 2, days = 5, notes = "")
+                Medication(id = "m-${System.currentTimeMillis()}", name = "", dose = "1 tablet", frequency = 2, days = 5, notes = "", times = CareData.defaultTimes(2))
             )
         )
     }
     var acknowledgedSevere by remember { mutableStateOf(false) }
 
-    val safetyAlerts = remember(meds, profile) {
-        CareData.checkPrescription(meds, profile?.allergies ?: emptyList())
+    val safetyAlerts = remember(meds, profile, currentActiveMeds) {
+        CareData.checkPrescription(meds, profile?.allergies ?: emptyList(), currentActiveMeds)
     }
     val hasSevere = safetyAlerts.any { it.level == "severe" }
 
     BackHandler {
         viewModel.navigateBack()
+    }
+
+    if (profile?.careTeamSharingConsent != true) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            CareHeader(title = "Write prescription", onBack = { viewModel.navigateBack() })
+            CareCard(modifier = Modifier.padding(18.dp)) {
+                Text("Prescription unavailable", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "This patient has not enabled care-team sharing consent. Prescription entry is unavailable in this screen.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
     }
 
     Column(
@@ -1284,8 +1466,34 @@ fun DocPrescribeScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedTextField(value = m.dose, onValueChange = { d -> meds = meds.mapIndexed { index, med -> if (index == i) med.copy(dose = d) else med } }, modifier = Modifier.weight(1f), singleLine = true, shape = RoundedCornerShape(10.dp))
-                        OutlinedTextField(value = "${m.frequency}×/day", onValueChange = {}, modifier = Modifier.weight(1f), singleLine = true, shape = RoundedCornerShape(10.dp))
-                        OutlinedTextField(value = "${m.days} days", onValueChange = {}, modifier = Modifier.weight(1f), singleLine = true, shape = RoundedCornerShape(10.dp))
+                        OutlinedTextField(
+                            value = frequencyInputs[m.id] ?: m.frequency.toString(),
+                            onValueChange = { input ->
+                                frequencyInputs = frequencyInputs + (m.id to input)
+                                input.toIntOrNull()?.takeIf { it > 0 }?.let { frequency ->
+                                    meds = meds.mapIndexed { index, med ->
+                                        if (index == i) med.copy(frequency = frequency, times = CareData.defaultTimes(frequency)) else med
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("×/day") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        OutlinedTextField(
+                            value = durationInputs[m.id] ?: m.days.toString(),
+                            onValueChange = { input ->
+                                durationInputs = durationInputs + (m.id to input)
+                                input.toIntOrNull()?.takeIf { it > 0 }?.let { days ->
+                                    meds = meds.mapIndexed { index, med -> if (index == i) med.copy(days = days) else med }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("Days") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp)
+                        )
                     }
                 }
             }
@@ -1294,7 +1502,7 @@ fun DocPrescribeScreen(
                 CareButton(
                     text = "Add medication",
                     onClick = {
-                        meds = meds + Medication(id = "m-${System.currentTimeMillis()}", name = "", dose = "1 tablet", frequency = 2, days = 5, notes = "")
+                        meds = meds + Medication(id = "m-${System.currentTimeMillis()}", name = "", dose = "1 tablet", frequency = 2, days = 5, notes = "", times = CareData.defaultTimes(2))
                     },
                     variant = BtnVariant.SOFT,
                     modifier = Modifier.fillMaxWidth()
@@ -1343,7 +1551,11 @@ fun DocPrescribeScreen(
                         fromChat = fromChat
                     )
                 },
-                enabled = diagnosisText.isNotBlank() && meds.any { it.name.isNotBlank() } && (!hasSevere || acknowledgedSevere),
+                enabled = diagnosisText.isNotBlank() && meds.any { it.name.isNotBlank() } &&
+                    meds.all { med ->
+                        (frequencyInputs[med.id] ?: med.frequency.toString()).toIntOrNull()?.let { it > 0 } == true &&
+                            (durationInputs[med.id] ?: med.days.toString()).toIntOrNull()?.let { it > 0 } == true
+                    } && (!hasSevere || acknowledgedSevere),
                 variant = BtnVariant.PRIMARY,
                 modifier = Modifier.fillMaxWidth().testTag("save_rx_btn")
             )
@@ -1623,8 +1835,6 @@ fun DocSettingsScreen(viewModel: CareViewModel) {
                 val context = LocalContext.current
                 val videoSdkProjectId by viewModel.videoSdkProjectId.collectAsState()
                 val videoSdkOrgName by viewModel.videoSdkOrgName.collectAsState()
-                var editingProject by remember { mutableStateOf(false) }
-                var projectInput by remember { mutableStateOf(videoSdkProjectId) }
 
                 CareCard {
                     Row(
@@ -1633,16 +1843,16 @@ fun DocSettingsScreen(viewModel: CareViewModel) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("VideoSDK Infrastructure", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("Real-time WebRTC teleconsultations", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Video call configuration", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Secure calls require server-issued room credentials.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(TeleSuccessSoft)
+                                .background(TeleMuted)
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text("Active · $20 credit", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TeleSuccess)
+                            Text("Not configured", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TeleDestructive)
                         }
                     }
 
@@ -1667,15 +1877,9 @@ fun DocSettingsScreen(viewModel: CareViewModel) {
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         CareButton(
-                            text = "Test VideoSDK Room",
+                            text = "Call setup unavailable",
                             onClick = {
-                                val testUrl = viewModel.getVideoSdkMeetingUrl("test-demo-room", me.name)
-                                try {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(testUrl))
-                                    context.startActivity(intent)
-                                } catch (_: Exception) {
-                                    viewModel.showToast("Cannot launch browser")
-                                }
+                                viewModel.showToast("Configure an authenticated VideoSDK backend before starting calls.")
                             },
                             variant = BtnVariant.OUTLINE,
                             modifier = Modifier.weight(1f)
