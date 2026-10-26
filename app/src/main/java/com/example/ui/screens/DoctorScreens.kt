@@ -113,24 +113,7 @@ import com.example.ui.components.CareButton
 import com.example.ui.components.CareCard
 import com.example.ui.components.CareField
 import com.example.ui.components.CareHeader
-import com.example.ui.theme.TeleAccent
-import com.example.ui.theme.TeleAccentSoft
-import com.example.ui.theme.TeleBorder
-import com.example.ui.theme.TeleCall
-import com.example.ui.theme.TeleCallBorder
-import com.example.ui.theme.TeleCallForeground
-import com.example.ui.theme.TeleCallSurface
-import com.example.ui.theme.TeleCallTextMuted
-import com.example.ui.theme.TeleCallTextSecondary
-import com.example.ui.theme.TeleDestructive
-import com.example.ui.theme.TeleDestructiveSoft
-import com.example.ui.theme.TeleMuted
-import com.example.ui.theme.TelePrimary
-import com.example.ui.theme.TelePrimarySoft
-import com.example.ui.theme.TeleSuccess
-import com.example.ui.theme.TeleSuccessSoft
-import com.example.ui.theme.TeleSuccessVibrant
-import com.example.ui.theme.TeleWarningVibrant
+import com.example.ui.theme.*
 import com.example.video.CallState
 import kotlinx.coroutines.delay
 

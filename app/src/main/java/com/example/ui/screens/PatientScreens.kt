@@ -104,16 +104,7 @@ import com.example.ui.components.CareCard
 import com.example.ui.components.CareField
 import com.example.ui.components.CareHeader
 import com.example.ui.components.CareStars
-import com.example.ui.theme.TeleAccent
-import com.example.ui.theme.TeleAccentSoft
-import com.example.ui.theme.TeleBorder
-import com.example.ui.theme.TeleDestructive
-import com.example.ui.theme.TeleDestructiveSoft
-import com.example.ui.theme.TeleMuted
-import com.example.ui.theme.TelePrimary
-import com.example.ui.theme.TelePrimarySoft
-import com.example.ui.theme.TeleSuccess
-import com.example.ui.theme.TeleSuccessSoft
+import com.example.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date

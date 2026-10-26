@@ -3,8 +3,12 @@ package com.example
 import com.example.data.local.CareData
 import com.example.data.model.Medication
 import com.example.data.model.PatientAllergy
+import com.example.video.CallState
+import com.example.video.VideoCallManager
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -108,5 +112,68 @@ class ExampleUnitTest {
         assertEquals("fe33aadd-4607-477a-88b7-f2683e9f6f3e", CareData.VIDEOSDK_PROJECT_ID)
         assertEquals("Malik's Org", CareData.VIDEOSDK_ORG_NAME)
         assertEquals("https://us.app.videosdk.live/dashboard/ADWLQ29Y0YHD", CareData.VIDEOSDK_DASHBOARD_URL)
+    }
+
+    @Test
+    fun videoCallManager_initializationAndDefaults() {
+        val manager = VideoCallManager.getInstance()
+        manager.initialize()
+
+        assertEquals("fe33aadd-4607-477a-88b7-f2683e9f6f3e", manager.projectId.value)
+        assertEquals("Malik's Org", manager.organization.value)
+        assertTrue(manager.isInitialized.value)
+    }
+
+    @Test
+    fun videoCallManager_joinRoomAndTrackControls() {
+        val manager = VideoCallManager.getInstance()
+        manager.reset()
+
+        val session = manager.joinRoom(
+            appointmentId = "apt-777",
+            participantName = "Dr. Amina",
+            isDoctor = true,
+            initialMic = true,
+            initialCam = true
+        )
+
+        assertNotNull(session)
+        assertEquals("careconnect-apt777", session.meetingId)
+        assertEquals("apt-777", session.appointmentId)
+        assertEquals("Dr. Amina", session.participantName)
+        assertTrue(session.isDoctor)
+        assertEquals(CallState.RINGING, manager.callState.value)
+        assertTrue(manager.isMicOn.value)
+        assertTrue(manager.isCamOn.value)
+
+        // Test mic toggle
+        val micAfterToggle = manager.toggleMic()
+        assertFalse(micAfterToggle)
+        assertFalse(manager.isMicOn.value)
+        val micRestored = manager.toggleMic()
+        assertTrue(micRestored)
+        assertTrue(manager.isMicOn.value)
+
+        // Test camera toggle
+        val camAfterToggle = manager.toggleCamera()
+        assertFalse(camAfterToggle)
+        assertFalse(manager.isCamOn.value)
+        val camRestored = manager.toggleCamera()
+        assertTrue(camRestored)
+        assertTrue(manager.isCamOn.value)
+
+        // Test camera switch
+        val initialFacing = manager.cameraFacing.value
+        val switchedFacing = manager.switchCamera()
+        assertTrue(switchedFacing != initialFacing)
+
+        // Test leave room and reset
+        manager.leaveRoom()
+        assertEquals(CallState.ENDED, manager.callState.value)
+
+        manager.reset()
+        assertEquals(CallState.IDLE, manager.callState.value)
+        assertNull(manager.currentSession.value)
+        assertEquals(0, manager.elapsedSeconds.value)
     }
 }
