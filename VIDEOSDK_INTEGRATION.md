@@ -26,7 +26,7 @@ For Prebuilt in WebView, the official quick start uses a room ID and token in it
 
 VideoSDK's Android token documentation recommends generating access tokens on a backend so API secrets stay safe. Issue short-lived tokens scoped to the authorized appointment room and participant, and validate the signed-in user's role and appointment access server-side. Never package the VideoSDK secret in the APK, Android `.env`, source, or client-side BuildConfig. Do not use a predictable appointment-derived room slug as the authorization boundary.
 
-Until there is an authenticated token endpoint and provider credentials in the server's protected environment, the app should fail closed and clearly say that secure call setup is unavailable. It must not show fabricated connection quality, encryption, latency, or connected status.
+Until the Android app is wired to use the authenticated backend endpoint with real Supabase identity and appointment records, the Android call path should fail closed and clearly say that secure call setup is unavailable. It must not show fabricated connection quality, encryption, latency, or connected status.
 
 ## Official sources
 
