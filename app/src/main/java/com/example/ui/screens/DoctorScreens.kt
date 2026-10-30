@@ -1816,8 +1816,6 @@ fun DocSettingsScreen(viewModel: CareViewModel) {
 
             item {
                 val context = LocalContext.current
-                val videoSdkProjectId by viewModel.videoSdkProjectId.collectAsState()
-                val videoSdkOrgName by viewModel.videoSdkOrgName.collectAsState()
 
                 CareCard {
                     Row(
@@ -1841,19 +1839,10 @@ fun DocSettingsScreen(viewModel: CareViewModel) {
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Organization: ", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                        Text(videoSdkOrgName, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TelePrimary)
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text("Project Configuration ID:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
-                        text = videoSdkProjectId,
+                        "VideoSDK credentials stay on the backend. This Android demo still needs Supabase sign-in and real appointment IDs before it can request an authorized room.",
                         fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Medium
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))

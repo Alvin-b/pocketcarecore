@@ -94,42 +94,49 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun videoSdkUrl_formatsMeetingCorrectly() {
-        val apptId = "apt-101"
-        val meetingId = CareData.formatMeetingId(apptId)
-        assertEquals("careconnect-apt101", meetingId)
+    fun videoSdkConfiguration_staysServerSideAndDoesNotPutTokensInUrls() {
+        val appointmentId = "apt-101"
+        assertEquals("careconnect-apt101", CareData.formatMeetingId(appointmentId))
 
-        val url = CareData.buildVideoSdkMeetingUrl(apptId, "Joy Kamau")
-        assertTrue(url.startsWith("https://us.app.videosdk.live/v2/meeting/careconnect-apt101"))
-        assertTrue(url.contains("name=Joy+Kamau"))
-        assertTrue(url.contains("videosdk.live"))
+        val meetingUrl = CareData.buildVideoSdkMeetingUrl(appointmentId, "Joy Kamau", "test-token")
+        assertTrue(meetingUrl.startsWith("https://us.app.videosdk.live/v2/meeting/careconnect-apt101"))
+        assertTrue(meetingUrl.contains("name=Joy+Kamau"))
+        assertFalse(meetingUrl.contains("test-token"))
+        assertFalse(meetingUrl.contains("token="))
 
-        val embedUrl = CareData.buildVideoSdkEmbedUrl(apptId, "Dr. Amina", micEnabled = true, webcamEnabled = true)
-        assertTrue(embedUrl.startsWith("https://embed.videosdk.live/rtc-js-prebuilt/0.3.43/?meetingId=careconnect-apt101"))
+        val embedUrl = CareData.buildVideoSdkEmbedUrl(
+            appointmentId,
+            "Dr. Amina",
+            token = "test-token",
+            micEnabled = true,
+            webcamEnabled = true
+        )
         assertTrue(embedUrl.contains("micEnabled=true"))
         assertTrue(embedUrl.contains("webcamEnabled=true"))
+        assertFalse(embedUrl.contains("test-token"))
+        assertFalse(embedUrl.contains("token="))
 
-        assertEquals("fe33aadd-4607-477a-88b7-f2683e9f6f3e", CareData.VIDEOSDK_PROJECT_ID)
-        assertEquals("Malik's Org", CareData.VIDEOSDK_ORG_NAME)
-        assertEquals("https://us.app.videosdk.live/dashboard/ADWLQ29Y0YHD", CareData.VIDEOSDK_DASHBOARD_URL)
+        assertEquals("https://us.app.videosdk.live/dashboard/GMQXZEI1IBSP", CareData.VIDEOSDK_DASHBOARD_URL)
     }
 
     @Test
-    fun videoCallManager_initializationAndDefaults() {
+    fun videoCallManager_initializationDoesNotClaimToBeConfigured() {
         val manager = VideoCallManager.getInstance()
+        manager.reset()
         manager.initialize()
 
-        assertEquals("fe33aadd-4607-477a-88b7-f2683e9f6f3e", manager.projectId.value)
-        assertEquals("Malik's Org", manager.organization.value)
-        assertTrue(manager.isInitialized.value)
+        assertEquals("Server-side only", manager.projectId.value)
+        assertEquals("CareConnect", manager.organization.value)
+        assertEquals("", manager.token.value)
+        assertFalse(manager.isInitialized.value)
     }
 
     @Test
-    fun videoCallManager_joinRoomAndTrackControls() {
+    fun videoCallManager_joinRoomFailsClosedWithoutARealAuthenticatedSession() {
         val manager = VideoCallManager.getInstance()
         manager.reset()
 
-        val session = manager.joinRoom(
+        manager.joinRoom(
             appointmentId = "apt-777",
             participantName = "Dr. Amina",
             isDoctor = true,
@@ -137,37 +144,16 @@ class ExampleUnitTest {
             initialCam = true
         )
 
-        assertNotNull(session)
-        assertEquals("careconnect-apt777", session.meetingId)
-        assertEquals("apt-777", session.appointmentId)
-        assertEquals("Dr. Amina", session.participantName)
-        assertTrue(session.isDoctor)
-        assertEquals(CallState.RINGING, manager.callState.value)
-        assertTrue(manager.isMicOn.value)
-        assertTrue(manager.isCamOn.value)
-
-        // Test mic toggle
-        val micAfterToggle = manager.toggleMic()
-        assertFalse(micAfterToggle)
+        assertEquals(CallState.ERROR, manager.callState.value)
+        assertNull(manager.currentSession.value)
+        assertTrue(manager.participants.value.isEmpty())
         assertFalse(manager.isMicOn.value)
-        val micRestored = manager.toggleMic()
-        assertTrue(micRestored)
-        assertTrue(manager.isMicOn.value)
-
-        // Test camera toggle
-        val camAfterToggle = manager.toggleCamera()
-        assertFalse(camAfterToggle)
         assertFalse(manager.isCamOn.value)
-        val camRestored = manager.toggleCamera()
-        assertTrue(camRestored)
-        assertTrue(manager.isCamOn.value)
+        assertEquals("Unavailable", manager.diagnostics.value.resolution)
+        assertEquals(0, manager.elapsedSeconds.value)
+        assertFalse(manager.toggleMic())
+        assertFalse(manager.toggleCamera())
 
-        // Test camera switch
-        val initialFacing = manager.cameraFacing.value
-        val switchedFacing = manager.switchCamera()
-        assertTrue(switchedFacing != initialFacing)
-
-        // Test leave room and reset
         manager.leaveRoom()
         assertEquals(CallState.ENDED, manager.callState.value)
 

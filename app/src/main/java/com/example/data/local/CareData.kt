@@ -24,15 +24,16 @@ import java.util.Locale
 
 object CareData {
 
-    const val VIDEOSDK_PROJECT_ID = "fe33aadd-4607-477a-88b7-f2683e9f6f3e"
-    const val VIDEOSDK_ORG_NAME = "Malik's Org"
-    const val VIDEOSDK_DASHBOARD_URL = "https://us.app.videosdk.live/dashboard/ADWLQ29Y0YHD"
+    const val VIDEOSDK_PROJECT_ID = "Server-side only"
+    const val VIDEOSDK_ORG_NAME = "CareConnect"
+    const val VIDEOSDK_DASHBOARD_URL = "https://us.app.videosdk.live/dashboard/GMQXZEI1IBSP"
 
     fun formatMeetingId(appointmentId: String): String {
         val clean = appointmentId.filter { it.isLetterOrDigit() }.lowercase(Locale.ROOT)
         return "careconnect-$clean"
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun buildVideoSdkMeetingUrl(
         appointmentId: String,
         name: String = "Participant",
@@ -41,14 +42,10 @@ object CareData {
         val roomSlug = formatMeetingId(appointmentId)
         val encodedName = java.net.URLEncoder.encode(name, "UTF-8")
         val base = "https://us.app.videosdk.live/v2/meeting/$roomSlug?name=$encodedName"
-        return if (!token.isNullOrBlank()) {
-            val encodedToken = java.net.URLEncoder.encode(token, "UTF-8")
-            "$base&token=$encodedToken"
-        } else {
-            base
-        }
+        return base
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun buildVideoSdkEmbedUrl(
         appointmentId: String,
         name: String = "Participant",
@@ -59,12 +56,7 @@ object CareData {
         val roomSlug = formatMeetingId(appointmentId)
         val encodedName = java.net.URLEncoder.encode(name, "UTF-8")
         val base = "https://embed.videosdk.live/rtc-js-prebuilt/0.3.43/?meetingId=$roomSlug&name=$encodedName&micEnabled=$micEnabled&webcamEnabled=$webcamEnabled&theme=DARK"
-        return if (!token.isNullOrBlank()) {
-            val encodedToken = java.net.URLEncoder.encode(token, "UTF-8")
-            "$base&token=$encodedToken"
-        } else {
-            base
-        }
+        return base
     }
 
     fun todayISO(offsetDays: Int = 0): String {

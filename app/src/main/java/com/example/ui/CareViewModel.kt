@@ -166,9 +166,10 @@ class CareViewModel(application: Application) : AndroidViewModel(application) {
     private val _useEmbeddedVideoSdk = MutableStateFlow(true)
     val useEmbeddedVideoSdk: StateFlow<Boolean> = _useEmbeddedVideoSdk.asStateFlow()
 
+    @Suppress("UNUSED_PARAMETER")
     fun updateVideoSdkConfig(projectId: String, token: String) {
-        videoCallManager.initialize(projectId = projectId, token = token)
-        showToast("VideoSDK configuration updated")
+        videoCallManager.initialize()
+        showToast("VideoSDK credentials are server-side; Android calls need account sign-in and real appointments.")
     }
 
     fun toggleEmbeddedVideoSdk(enabled: Boolean) {
@@ -181,8 +182,8 @@ class CareViewModel(application: Application) : AndroidViewModel(application) {
         isDoctor: Boolean,
         initialMic: Boolean = true,
         initialCam: Boolean = true
-    ): CallSession {
-        return videoCallManager.joinRoom(appointmentId, participantName, isDoctor, initialMic, initialCam)
+    ) {
+        videoCallManager.joinRoom(appointmentId, participantName, isDoctor, initialMic, initialCam)
     }
 
     fun toggleCallMic(): Boolean = videoCallManager.toggleMic()

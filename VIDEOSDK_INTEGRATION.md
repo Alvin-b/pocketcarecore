@@ -2,9 +2,17 @@
 
 ## Current state
 
-The Android call manager currently fails closed: it does not join a provider room and reports that secure call setup is unavailable rather than claiming a connection. The former simulated/WebView path is not a verified call integration.
+The Android call manager fails closed: it does not join a provider room and reports that secure call setup is unavailable rather than claiming a connection. The former simulated/WebView path is not a verified call integration.
 
-The VideoSDK dashboard has an existing active `Auto Generated` API key. Its secret remained masked; no key was revealed, copied, or created during this review. This repository contains no authenticated token backend or server-side appointment authorization, so live calls must remain disabled until those pieces are configured.
+The VideoSDK dashboard has an existing active `Auto Generated` API key. Its secret remained masked; no key was revealed, copied, or created during this review. The backend must keep API credentials server-side; no API secret belongs in the Android project.
+
+## CareConnect backend handoff
+
+The CareConnect backend repository now provides `POST /api/videosdk/session`. The request body is `{ "appointmentId": "<Supabase appointment UUID>" }`; the caller must send `Authorization: Bearer <Supabase access token>`. The endpoint accepts only the appointment's authenticated patient or assigned clinician with the matching `patient`/`doctor` role, requires payment and an `upcoming` or `in_progress` status, and additionally requires the clinician's verification status to be `approved`. It creates or reuses the appointment's stable VideoSDK room and returns `meetingId`, a 10-minute room-and-participant-bound token, `participantId`, `participantName`, `callType`, and `tokenExpiresAt`.
+
+In the Lovable project's server-side Secrets/environment settings, configure `VIDEOSDK_API_KEY` and `VIDEOSDK_API_SECRET` for the intended VideoSDK project. Keep them server-only; never paste them into chat, Android resources, BuildConfig, browser URLs, or a checked-in `.env` file. The authenticated web call page uses this endpoint and the official VideoSDK React SDK.
+
+The Android app does not yet have Supabase sign-in or real appointment records. Its call manager now fails closed instead of simulating a joined room, and its placeholder diagnostics report unavailable. Native Android calls remain a separate follow-up: connect Supabase identity and real appointment lookup, call this endpoint with the user's bearer token, and drive call controls/state from the official native VideoSDK SDK callbacks. Until that work is complete, Android should not be described as supporting live calls.
 
 ## Supported implementation paths
 
