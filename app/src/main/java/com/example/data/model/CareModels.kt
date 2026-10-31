@@ -52,6 +52,8 @@ data class Medication(
     val frequency: Int,
     val days: Int,
     val notes: String = "",
+    val route: String = "Oral", // "Oral", "Inhalation", "Topical", "Sublingual", "Intravenous"
+    val instructions: String = "Take after meals",
     val times: List<String> = emptyList(),
     val reminders: Boolean = true,
     val taken: List<String> = emptyList() // "YYYY-MM-DD HH:MM"
@@ -67,7 +69,18 @@ data class Prescription(
     val clinicalNotes: String? = null,
     val meds: List<Medication>,
     val safetyAlerts: List<String> = emptyList(),
-    val safetyAcknowledged: Boolean = false
+    val safetyAcknowledged: Boolean = false,
+    val kmpdcRegNumber: String = "KMPDC-A10293",
+    val doctorName: String = "Dr. Amina Wanjiru",
+    val specialty: String = "Family Physician",
+    val facilityName: String = "CareConnect Medical Centre",
+    val facilityLicense: String = "KMPDC-HF-0492",
+    val rxSerialNumber: String? = null,
+    val digitalSignatureHash: String? = null,
+    val signedAt: String? = null,
+    val isEncrypted: Boolean = true,
+    val encryptionAlgorithm: String = "AES-256-GCM",
+    val secondaryIcd11Codes: List<String> = emptyList()
 )
 
 data class Message(
@@ -84,7 +97,11 @@ data class HealthRecord(
     val name: String,
     val kind: String,
     val size: String,
-    val date: String
+    val date: String,
+    val icd11Code: String? = null,
+    val icd11Title: String? = null,
+    val isEncrypted: Boolean = true,
+    val encryptionStandard: String = "AES-256-GCM"
 )
 
 data class Vital(
@@ -158,7 +175,10 @@ data class Specialty(
 
 data class DiagnosisOption(
     val code: String,
-    val title: String
+    val title: String,
+    val chapter: String = "",
+    val category: String = "",
+    val description: String = ""
 )
 
 data class SafetyAlert(
@@ -168,3 +188,186 @@ data class SafetyAlert(
     val title: String,
     val detail: String
 )
+
+data class MedicalFacility(
+    val id: String,
+    val name: String,
+    val license: String,
+    val type: String, // "Hospital & Medical Center", "Specialized Clinic", "Diagnostic Center & Lab", "Pharmacy"
+    val address: String,
+    val phone: String,
+    val totalBeds: Int,
+    val occupiedBeds: Int,
+    val emergencyAvailable: Boolean = true,
+    val accreditation: String = "MOH & KMPDC Certified Level 4 Facility",
+    val rating: Double = 4.8,
+    val reviewCount: Int = 340,
+    val openHours: String = "24/7 Always Open"
+)
+
+data class FacilityStaffMember(
+    val id: String,
+    val name: String,
+    val role: String,
+    val license: String,
+    val department: String,
+    val isOnDuty: Boolean = true,
+    val currentPatients: Int = 0
+)
+
+data class PharmacyDispenseOrder(
+    val id: String,
+    val prescriptionId: String,
+    val patientName: String,
+    val doctorName: String,
+    val date: String,
+    val medicationSummary: String,
+    val status: String = "Ready for pickup", // "Pending", "Ready for pickup", "Dispensed"
+    val dosageNotes: String
+)
+
+data class FacilityDepartment(
+    val id: String,
+    val name: String,
+    val description: String,
+    val headDoctorName: String,
+    val activeStaffCount: Int,
+    val waitTimeMinutes: Int,
+    val iconKey: String = "stethoscope"
+)
+
+enum class FacilityVisitType {
+    TELEMEDICINE_POD,
+    IN_PERSON_CLINIC,
+    EMERGENCY_TRIAGE
+}
+
+enum class TriagePriority {
+    ROUTINE,
+    URGENT,
+    EMERGENCY
+}
+
+data class FacilityBooking(
+    val id: String,
+    val patientName: String,
+    val departmentId: String,
+    val departmentName: String,
+    val assignedStaffName: String?,
+    val date: String,
+    val time: String,
+    val visitType: FacilityVisitType,
+    val priority: TriagePriority,
+    val reason: String,
+    val status: String = "Checked In", // "Scheduled", "Checked In", "In Consultation", "Completed"
+    val consultationRoomId: String? = null
+)
+
+data class HospitalReferral(
+    val id: String,
+    val patientName: String,
+    val fromDepartment: String,
+    val referringClinician: String,
+    val toDepartment: String,
+    val targetClinician: String,
+    val urgency: String, // "Routine", "Urgent", "STAT Emergency"
+    val clinicalReason: String,
+    val summaryNotes: String,
+    val date: String,
+    val status: String = "Pending Review" // "Pending Review", "Accepted", "Completed"
+)
+
+data class HospitalProcedureOrder(
+    val id: String,
+    val patientName: String,
+    val orderingClinician: String,
+    val department: String,
+    val procedureName: String,
+    val category: String, // "Diagnostic Laboratory", "Radiology / Imaging", "Procedure Suite", "Specialist Assessment"
+    val urgency: String, // "Routine", "STAT Urgent"
+    val clinicalIndication: String,
+    val status: String = "Ordered", // "Ordered", "Sample Collected", "In Analysis", "Results Completed"
+    val resultSummary: String? = null,
+    val orderedDate: String,
+    val completedDate: String? = null
+)
+
+data class HospitalFollowUp(
+    val id: String,
+    val patientName: String,
+    val attendingDoctor: String,
+    val dischargeDiagnosis: String,
+    val followUpDate: String,
+    val followUpType: String, // "Telehealth Video Consultation", "Vitals Telemetry Review", "Medication Adherence Check"
+    val status: String = "Due Today", // "Scheduled", "Due Today", "Completed"
+    val clinicalProtocol: String,
+    val linkedAppointmentId: String? = null
+)
+
+data class HospitalWardBed(
+    val id: String,
+    val bedCode: String,
+    val wardName: String,
+    val isOccupied: Boolean,
+    val patientName: String? = null,
+    val admittedDate: String? = null,
+    val attendingClinician: String? = null
+)
+
+data class FacilityService(
+    val id: String,
+    val facilityId: String,
+    val name: String,
+    val category: String, // "Consultation", "Diagnostic & Lab", "Imaging & Radiology", "Inpatient & Wards", "Specialist Assessment"
+    val description: String,
+    val price: Double, // in KSh
+    val durationMinutes: Int = 30,
+    val isTelehealthAvailable: Boolean = true
+)
+
+data class FacilityMedication(
+    val id: String,
+    val sellerId: String, // facilityId or chemistId
+    val sellerName: String,
+    val name: String,
+    val genericName: String,
+    val dosage: String,
+    val price: Double,
+    val inStock: Boolean = true,
+    val category: String,
+    val requiresPrescription: Boolean = false,
+    val description: String = ""
+)
+
+data class ChemistPharmacy(
+    val id: String,
+    val name: String,
+    val license: String,
+    val address: String,
+    val phone: String,
+    val rating: Double = 4.8,
+    val reviewCount: Int = 120,
+    val deliveryTimeMinutes: Int = 30,
+    val isOpen247: Boolean = true,
+    val expressDelivery: Boolean = true,
+    val deliveryFee: Double = 150.0
+)
+
+data class ChemistPrescriptionOrder(
+    val id: String,
+    val prescriptionId: String,
+    val patientName: String,
+    val patientPhone: String,
+    val chemistId: String,
+    val chemistName: String,
+    val doctorName: String,
+    val medicationsSummary: String,
+    val totalAmount: Double,
+    val paymentMethod: String = "M-Pesa",
+    val paymentStatus: String = "Paid",
+    val fulfillmentStatus: String = "Sent to Chemist", // "Sent to Chemist", "Preparing", "Out for Delivery", "Ready for Pickup", "Delivered"
+    val deliveryType: String = "Home Delivery", // "Home Delivery", "Counter Pickup"
+    val deliveryAddress: String = "Nairobi CBD",
+    val orderDate: String
+)
+

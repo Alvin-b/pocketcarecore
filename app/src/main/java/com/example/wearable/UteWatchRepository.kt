@@ -287,17 +287,19 @@ class UteWatchRepository(context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    private fun toNearbyWatch(scanDevice: UteScanDevice): UteWatchDevice? = try {
-        val device = scanDevice.device ?: return null
-        val address = device.address ?: return null
-        if (address.isBlank()) return null
-        UteWatchDevice(
-            name = device.name?.takeIf { it.isNotBlank() } ?: "Ute-compatible wearable",
-            address = address,
-            rssi = scanDevice.rssi
-        )
-    } catch (_: SecurityException) {
-        null
+    private fun toNearbyWatch(scanDevice: UteScanDevice): UteWatchDevice? {
+        return try {
+            val device = scanDevice.device ?: return null
+            val address = device.address ?: return null
+            if (address.isBlank()) return null
+            UteWatchDevice(
+                name = device.name?.takeIf { it.isNotBlank() } ?: "Ute-compatible wearable",
+                address = address,
+                rssi = scanDevice.rssi
+            )
+        } catch (_: SecurityException) {
+            null
+        }
     }
 
     private fun addOrUpdateDevice(device: UteWatchDevice) {

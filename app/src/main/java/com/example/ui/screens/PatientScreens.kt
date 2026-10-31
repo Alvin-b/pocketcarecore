@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.BabyChangingStation
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
@@ -92,6 +94,7 @@ import com.example.data.model.Appointment
 import com.example.data.model.AppointmentStatus
 import com.example.data.model.CallType
 import com.example.data.model.Doctor
+import com.example.data.model.MedicalFacility
 import com.example.data.model.Medication
 import com.example.data.model.Prescription
 import com.example.data.model.Specialty
@@ -104,6 +107,7 @@ import com.example.ui.components.CareCard
 import com.example.ui.components.CareField
 import com.example.ui.components.CareHeader
 import com.example.ui.components.CareStars
+import com.example.ui.components.PatientDashboardSummaryCard
 import com.example.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -166,14 +170,23 @@ fun WelcomeScreen(viewModel: CareViewModel) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                Text(
+                    text = "SELECT PORTAL TO CONTINUE",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White.copy(alpha = 0.7f),
+                    letterSpacing = 1.sp
+                )
+
+                // Option 1: Looking for Healthcare (Patient)
                 CareButton(
-                    text = "I need a doctor",
+                    text = "Looking for healthcare",
                     onClick = {
                         viewModel.setRole("patient")
-                        viewModel.showToast("Opening patient dashboard")
+                        viewModel.showToast("Logged in as Patient")
                     },
                     variant = BtnVariant.ACCENT,
                     modifier = Modifier
@@ -181,17 +194,31 @@ fun WelcomeScreen(viewModel: CareViewModel) {
                         .testTag("welcome_patient_btn")
                 )
 
+                // Option 2: Healthcare Personnel (Doctor / Clinician)
                 CareButton(
-                    text = "Doctor sign in / registration",
+                    text = "Healthcare Personnel Sign In",
                     onClick = {
-                        viewModel.setRole(null)
-                        viewModel.navigateTo(CareScreen.DocRegister)
-                        viewModel.showToast("Opening clinician setup")
+                        viewModel.setRole("doctor")
+                        viewModel.showToast("Logged in as Clinician")
                     },
                     variant = BtnVariant.OUTLINE,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("welcome_doctor_btn")
+                )
+
+                // Option 3: Medical Facility (Hospital / Clinic / Diagnostic Center)
+                CareButton(
+                    text = "Medical Facility Portal",
+                    onClick = {
+                        viewModel.setRole("facility")
+                        viewModel.showToast("Logged in as Medical Facility")
+                    },
+                    variant = BtnVariant.GHOST,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                        .testTag("welcome_facility_btn")
                 )
             }
         }
@@ -379,6 +406,61 @@ fun PatientHomeScreen(viewModel: CareViewModel) {
             }
         }
 
+        // Hospital Structure Care Booking Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.navigateTo(CareScreen.FacilityBookCare()) }
+                    .testTag("action_book_hospital_care"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = TelePrimarySoft.copy(alpha = 0.35f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TelePrimary.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(TelePrimary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Apartment, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                        }
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Hospital Facility Care", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(TeleSuccessSoft)
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Level 4 Center", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TeleSuccess)
+                                }
+                            }
+                            Text("Book by department & on-duty hospital team", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    Icon(
+                        Icons.Default.Apartment,
+                        contentDescription = null,
+                        tint = TelePrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+
+
         // Emergency SOS Button
         item {
             CareButton(
@@ -394,71 +476,9 @@ fun PatientHomeScreen(viewModel: CareViewModel) {
             )
         }
 
-        // Next Appointment Card
-        if (nextAppt != null && nextDoctor != null) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("home_next_appt_card"),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = TelePrimary)
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Text(
-                            text = "NEXT APPOINTMENT",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.8f),
-                            letterSpacing = 1.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CareAvatar(name = nextDoctor.name, photoRes = nextDoctor.photoRes, size = 48.dp)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(nextDoctor.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
-                                Text(nextDoctor.specialty, fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
-                            }
-                            Icon(
-                                imageVector = if (nextAppt.type == CallType.VIDEO) Icons.Default.Videocam else Icons.Default.Call,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(Color.White.copy(alpha = 0.15f))
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "${if (nextAppt.date == CareData.todayISO()) "Today" else nextAppt.date} · ${nextAppt.time}",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            CareButton(
-                                text = "Join",
-                                onClick = { viewModel.navigateTo(CareScreen.Call(nextAppt.id)) },
-                                variant = BtnVariant.ACCENT,
-                                modifier = Modifier
-                                    .height(34.dp)
-                                    .testTag("home_join_call_btn")
-                            )
-                        }
-                    }
-                }
-            }
+        // Patient Telemetry & Upcoming Appointments Dashboard
+        item {
+            PatientDashboardSummaryCard(viewModel = viewModel)
         }
 
         // Specialties 3x2 Grid
@@ -660,21 +680,117 @@ fun DoctorRowCard(
 }
 
 @Composable
+fun FacilityRowCard(
+    facility: MedicalFacility,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    CareCard(
+        modifier = modifier.testTag("facility_card_${facility.id}"),
+        onClick = onClick
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(TelePrimary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.LocalHospital,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(facility.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
+                        Icon(Icons.Default.Verified, contentDescription = null, tint = TelePrimary, modifier = Modifier.size(14.dp))
+                    }
+                    Text(facility.type, fontSize = 11.sp, color = TelePrimary, fontWeight = FontWeight.SemiBold)
+                    Text(facility.address, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(TeleSuccessSoft)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("Level 4 Certified", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TeleSuccess)
+                    }
+                    Text("★ ${facility.rating} (${facility.reviewCount})", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                Text(
+                    text = "${facility.occupiedBeds}/${facility.totalBeds} Beds",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TelePrimary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Outpatient · Diagnostics · Meds · Telehealth",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "View Services & Pay →",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TelePrimary
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun DoctorsListScreen(
     viewModel: CareViewModel,
     initialSpecialty: String? = null
 ) {
     val doctors by viewModel.doctors.collectAsState()
+    val facilities by viewModel.facilities.collectAsState()
+
+    var directoryTab by remember { mutableStateOf(if (initialSpecialty?.startsWith("fac") == true) "Facilities" else "Doctors") }
     var filter by remember { mutableStateOf(if (CareData.SPECIALTIES.any { it.name == initialSpecialty }) initialSpecialty!! else "All") }
-    var query by remember { mutableStateOf(if (CareData.SPECIALTIES.none { it.name == initialSpecialty }) initialSpecialty ?: "" else "") }
+    var facilityFilter by remember { mutableStateOf("All") }
+    var query by remember { mutableStateOf(if (CareData.SPECIALTIES.none { it.name == initialSpecialty } && initialSpecialty?.startsWith("fac") != true) initialSpecialty ?: "" else "") }
 
     BackHandler {
         viewModel.navigateBack()
     }
 
-    val filteredList = doctors.filter { d ->
+    val filteredDoctors = doctors.filter { d ->
         (filter == "All" || d.specialty == filter) &&
                 (d.name + d.specialty + d.bio).contains(query, ignoreCase = true)
+    }
+
+    val filteredFacilities = facilities.filter { f ->
+        (facilityFilter == "All" || f.type.contains(facilityFilter, ignoreCase = true)) &&
+                (f.name + f.type + f.address + f.accreditation).contains(query, ignoreCase = true)
     }
 
     Column(
@@ -682,12 +798,72 @@ fun DoctorsListScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        CareHeader(title = "Find a doctor", onBack = { viewModel.navigateBack() })
+        CareHeader(title = if (directoryTab == "Doctors") "Find a doctor" else "Hospitals & Facilities", onBack = { viewModel.navigateBack() })
+
+        // Segmented Switcher: Doctors vs Facilities
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (directoryTab == "Doctors") TelePrimary else TeleMuted)
+                    .clickable { directoryTab = "Doctors" }
+                    .padding(vertical = 9.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        tint = if (directoryTab == "Doctors") Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        "Doctors (${doctors.size})",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = if (directoryTab == "Doctors") Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (directoryTab == "Facilities") TelePrimary else TeleMuted)
+                    .clickable { directoryTab = "Facilities" }
+                    .padding(vertical = 9.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(
+                        Icons.Default.Apartment,
+                        contentDescription = null,
+                        tint = if (directoryTab == "Facilities") Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        "Facilities (${facilities.size})",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = if (directoryTab == "Facilities") Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
 
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = { Text("e.g. rash, chest pain, child fever", fontSize = 13.sp) },
+            placeholder = { Text(if (directoryTab == "Doctors") "Search by doctor name or specialty..." else "Search by hospital, clinic, or service...", fontSize = 13.sp) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             modifier = Modifier
                 .fillMaxWidth()
@@ -698,46 +874,91 @@ fun DoctorsListScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Specialty filter chips
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp)
-        ) {
-            val filters = listOf("All") + CareData.SPECIALTIES.map { it.name }
-            items(filters) { item ->
-                val selected = filter == item
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (selected) TelePrimary else MaterialTheme.colorScheme.surface)
-                        .border(1.dp, if (selected) TelePrimary else TeleBorder, RoundedCornerShape(20.dp))
-                        .clickable { filter = item }
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        text = item,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+        if (directoryTab == "Doctors") {
+            // Specialty filter chips
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp)
+            ) {
+                val filters = listOf("All") + CareData.SPECIALTIES.map { it.name }
+                items(filters) { item ->
+                    val selected = filter == item
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (selected) TelePrimary else MaterialTheme.colorScheme.surface)
+                            .border(1.dp, if (selected) TelePrimary else TeleBorder, RoundedCornerShape(20.dp))
+                            .clickable { filter = item }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = item,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filteredDoctors) { doc ->
+                    DoctorRowCard(
+                        doctor = doc,
+                        onClick = { viewModel.navigateTo(CareScreen.DoctorProfile(doc.id)) }
                     )
                 }
             }
-        }
+        } else {
+            // Facility filter chips
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp)
+            ) {
+                val facilityFilters = listOf("All", "Hospital", "Specialized", "Pediatric", "Surgical")
+                items(facilityFilters) { fFilter ->
+                    val selected = facilityFilter == fFilter
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (selected) TelePrimary else MaterialTheme.colorScheme.surface)
+                            .border(1.dp, if (selected) TelePrimary else TeleBorder, RoundedCornerShape(20.dp))
+                            .clickable { facilityFilter = fFilter }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = fFilter,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
 
-        Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(filteredList) { doc ->
-                DoctorRowCard(
-                    doctor = doc,
-                    onClick = { viewModel.navigateTo(CareScreen.DoctorProfile(doc.id)) }
-                )
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(filteredFacilities) { fac ->
+                    FacilityRowCard(
+                        facility = fac,
+                        onClick = { viewModel.navigateTo(CareScreen.FacilityProfile(fac.id)) }
+                    )
+                }
             }
         }
     }

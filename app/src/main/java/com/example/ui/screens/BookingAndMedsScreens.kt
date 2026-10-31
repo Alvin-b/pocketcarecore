@@ -21,27 +21,40 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocalPharmacy
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Wallet
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,9 +62,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import com.example.data.model.ChemistPharmacy
+import com.example.data.model.ChemistPrescriptionOrder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -79,6 +96,7 @@ import com.example.data.model.PatientMedicalProfile
 import com.example.data.model.Prescription
 import com.example.ui.CareScreen
 import com.example.ui.CareViewModel
+import com.example.ui.components.DataEncryptionInfoModal
 import com.example.ui.components.BtnVariant
 import com.example.ui.components.CareAvatar
 import com.example.ui.components.CareButton
@@ -781,7 +799,14 @@ fun RateScreen(
 fun MedsScreen(viewModel: CareViewModel) {
     val prescriptions by viewModel.prescriptions.collectAsState()
     val doctors by viewModel.doctors.collectAsState()
+    val chemists by viewModel.chemists.collectAsState()
+    val chemistOrders by viewModel.chemistOrders.collectAsState()
     val today = CareData.todayISO()
+
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Prescriptions, 1: Chemists, 2: Orders
+    var searchChemistQuery by remember { mutableStateOf("") }
+    var prescriptionToFulfill by remember { mutableStateOf<Prescription?>(null) }
+    var showEncryptionModal by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -795,10 +820,13 @@ fun MedsScreen(viewModel: CareViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Medications", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Column {
+                Text("Medications & Pharmacy", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("Prescriptions, certified chemists & deliveries", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             CareButton(
-                text = "Allow alerts",
-                onClick = { viewModel.showToast("Phone notifications & in-app alerts active") },
+                text = "Alerts",
+                onClick = { viewModel.showToast("Dose reminders active for your scheduled medications") },
                 variant = BtnVariant.SOFT,
                 leadingIcon = { Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(14.dp)) },
                 modifier = Modifier.height(34.dp)
@@ -807,97 +835,561 @@ fun MedsScreen(viewModel: CareViewModel) {
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        if (prescriptions.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Prescriptions from your doctor will appear here.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // 3-Tab Segmented Selector
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            val tabs = listOf(
+                "Prescriptions (${prescriptions.size})",
+                "Chemists (${chemists.size})",
+                "Orders (${chemistOrders.size})"
+            )
+            tabs.forEachIndexed { index, label ->
+                val isSelected = selectedTab == index
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isSelected) TelePrimary else Color.Transparent)
+                        .clickable { selectedTab = index }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        fontSize = 11.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(prescriptions) { p ->
-                    val doc = doctors.find { it.id == p.doctorId }
+        }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("${doc?.name ?: "Doctor"} · ${p.date} · ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(p.diagnosis, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            if (!p.diagnosisCode.isNullOrBlank()) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(TelePrimarySoft).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                                    Text("ICD-11 ${p.diagnosisCode}", fontSize = 10.sp, color = TelePrimary, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(14.dp))
+
+        when (selectedTab) {
+            0 -> {
+                // Tab 0: Prescriptions List with "Fulfill with Chemist & Pay" flow
+                if (prescriptions.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Medication, contentDescription = null, tint = TeleMuted, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("No active prescriptions found.", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("Prescriptions from your doctor will appear here.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(prescriptions) { p ->
+                            val doc = doctors.find { it.id == p.doctorId }
+
+                            CareCard(
+                                borderColor = TelePrimary.copy(alpha = 0.25f)
+                            ) {
+                                // Prescription Header
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(doc?.name ?: "Attending Doctor", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text("Prescribed on ${p.date}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(TelePrimarySoft)
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(p.diagnosis, fontSize = 11.sp, color = TelePrimary, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                if (!p.diagnosisCode.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(TelePrimary.copy(alpha = 0.12f))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "ICD-11: ${p.diagnosisCode}",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                color = TelePrimary
+                                            )
+                                        }
+
+                                        if (p.secondaryIcd11Codes.isNotEmpty()) {
+                                            Text(
+                                                text = "+${p.secondaryIcd11Codes.size} differential",
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.weight(1f))
+
+                                        // Data Encryption badge
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(TeleSuccessSoft)
+                                                .clickable { showEncryptionModal = true }
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                Icon(Icons.Default.Lock, contentDescription = null, tint = TeleSuccess, modifier = Modifier.size(10.dp))
+                                                Text("AES-256", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TeleSuccess)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // KMPDC Compliance Badge
+                                if (!p.rxSerialNumber.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                            .border(0.5.dp, TeleBorder, RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Icon(Icons.Default.Verified, contentDescription = null, tint = TeleSuccess, modifier = Modifier.size(13.dp))
+                                                Text(
+                                                    text = "KMPDC: ${p.kmpdcRegNumber ?: "KMPDC-REG"}",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            Text(
+                                                text = p.rxSerialNumber ?: "",
+                                                fontSize = 9.sp,
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (!p.clinicalNotes.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                            .padding(8.dp)
+                                    ) {
+                                        Text("Doctor Instructions: ${p.clinicalNotes}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Medications in this prescription
+                                p.meds.forEach { m ->
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(MaterialTheme.colorScheme.surface)
+                                            .border(1.dp, TeleBorder, RoundedCornerShape(10.dp))
+                                            .padding(10.dp)
+                                    ) {
+                                        Column {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(
+                                                    modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(TeleAccentSoft),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(Icons.Default.Medication, contentDescription = null, tint = TeleAccent, modifier = Modifier.size(18.dp))
+                                                }
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(m.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                                    Text("${m.dose} · ${m.frequency}× daily for ${m.days} days", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        viewModel.updateMedication(p.id, m.id) { med -> med.copy(reminders = !med.reminders) }
+                                                    },
+                                                    modifier = Modifier.size(32.dp).clip(CircleShape).background(if (m.reminders) TelePrimary else TeleMuted)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (m.reminders) Icons.Default.Notifications else Icons.Default.NotificationsOff,
+                                                        contentDescription = null,
+                                                        tint = if (m.reminders) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                }
+                                            }
+
+                                            // Taken Today Checkboxes
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                m.times.forEach { t ->
+                                                    val key = "$today $t"
+                                                    val isDone = m.taken.contains(key)
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .background(if (isDone) TeleSuccessSoft else TeleMuted)
+                                                            .border(1.dp, if (isDone) TeleSuccess else TeleBorder, RoundedCornerShape(8.dp))
+                                                            .clickable {
+                                                                viewModel.updateMedication(p.id, m.id) { med ->
+                                                                    val updated = if (isDone) med.taken - key else med.taken + key
+                                                                    med.copy(taken = updated)
+                                                                }
+                                                            }
+                                                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = if (isDone) Icons.Default.CheckCircle else Icons.Default.Check,
+                                                            contentDescription = null,
+                                                            tint = if (isDone) TeleSuccess else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            modifier = Modifier.size(12.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text(t, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isDone) TeleSuccess else MaterialTheme.colorScheme.onSurface)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Fulfill with Chemist Action
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(TelePrimarySoft)
+                                        .padding(12.dp)
+                                ) {
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.LocalPharmacy, contentDescription = null, tint = TelePrimary, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Fulfill with Licensed Chemist", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = TelePrimary)
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            "Send this verified prescription directly to a local chemist (e.g. Goodlife, Haltons, Metro Dispensary) for instant preparation and express delivery.",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            lineHeight = 15.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        CareButton(
+                                            text = "Choose Chemist & Pay",
+                                            onClick = { prescriptionToFulfill = p },
+                                            variant = BtnVariant.PRIMARY,
+                                            leadingIcon = { Icon(Icons.Default.ShoppingBag, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
+                                            modifier = Modifier.fillMaxWidth().height(38.dp).testTag("fulfill_rx_${p.id}")
+                                        )
+                                    }
                                 }
                             }
                         }
+                    }
+                }
+            }
 
-                        if (!p.clinicalNotes.isNullOrBlank()) {
-                            CareCard(backgroundColor = TeleMuted.copy(alpha = 0.5f)) {
-                                Text("DOCTOR NOTES", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(p.clinicalNotes, fontSize = 12.sp)
-                            }
-                        }
+            1 -> {
+                // Tab 1: Chemists & Pharmacies Marketplace
+                Column(modifier = Modifier.fillMaxSize()) {
+                    OutlinedTextField(
+                        value = searchChemistQuery,
+                        onValueChange = { searchChemistQuery = it },
+                        placeholder = { Text("Search chemists by name or location...", fontSize = 12.sp) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp)
+                    )
 
-                        p.meds.forEach { m ->
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val filteredChemists = chemists.filter {
+                        it.name.contains(searchChemistQuery, ignoreCase = true) ||
+                        it.address.contains(searchChemistQuery, ignoreCase = true)
+                    }
+
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(filteredChemists) { chemist ->
                             CareCard {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(verticalAlignment = Alignment.Top) {
                                     Box(
-                                        modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(TeleAccentSoft),
+                                        modifier = Modifier
+                                            .size(46.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(TelePrimarySoft),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Default.Medication, contentDescription = null, tint = TeleAccent, modifier = Modifier.size(20.dp))
+                                        Icon(Icons.Default.LocalPharmacy, contentDescription = null, tint = TelePrimary, modifier = Modifier.size(24.dp))
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(m.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        Text("${m.dose} · ${m.frequency}× daily · ${m.days} days", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            viewModel.updateMedication(p.id, m.id) { med -> med.copy(reminders = !med.reminders) }
-                                        },
-                                        modifier = Modifier.size(36.dp).clip(CircleShape).background(if (m.reminders) TelePrimary else TeleMuted)
-                                    ) {
-                                        Icon(
-                                            imageVector = if (m.reminders) Icons.Default.Notifications else Icons.Default.NotificationsOff,
-                                            contentDescription = null,
-                                            tint = if (m.reminders) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(16.dp)
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(chemist.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Icon(Icons.Default.CheckCircle, contentDescription = "Licensed", tint = TeleSuccess, modifier = Modifier.size(14.dp))
+                                        }
+                                        Text(chemist.license, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                            Text("${chemist.rating} (${chemist.reviewCount} reviews)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("·", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("⚡ ${chemist.deliveryTimeMinutes} mins", fontSize = 11.sp, color = TelePrimary, fontWeight = FontWeight.Bold)
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(13.dp))
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                            Text(chemist.address, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            if (chemist.isOpen247) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(TeleSuccessSoft)
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("24/7 Open", fontSize = 10.sp, color = TeleSuccess, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(TelePrimarySoft)
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text("Delivery: ${CareData.formatKES(chemist.deliveryFee.toInt())}", fontSize = 10.sp, color = TelePrimary, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
                                     }
                                 }
 
                                 Spacer(modifier = Modifier.height(10.dp))
 
-                                // Reminder times pills
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    m.times.forEach { t ->
-                                        val key = "$today $t"
-                                        val isDone = m.taken.contains(key)
-
-                                        Row(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .background(if (isDone) TeleSuccessSoft else TeleMuted)
-                                                .border(1.dp, if (isDone) TeleSuccess else TeleBorder, RoundedCornerShape(10.dp))
-                                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(t, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            IconButton(
-                                                onClick = {
-                                                    viewModel.updateMedication(p.id, m.id) { med ->
-                                                        val updatedTaken = if (isDone) med.taken - key else med.taken + key
-                                                        med.copy(taken = updatedTaken)
-                                                    }
-                                                },
-                                                modifier = Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)).background(if (isDone) TeleSuccess else Color.White)
-                                            ) {
-                                                Icon(Icons.Default.Check, contentDescription = null, tint = if (isDone) Color.White else Color.Gray, modifier = Modifier.size(12.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CareButton(
+                                        text = "Fulfill Prescription",
+                                        onClick = {
+                                            if (prescriptions.isNotEmpty()) {
+                                                prescriptionToFulfill = prescriptions.first()
+                                            } else {
+                                                viewModel.showToast("No active prescriptions available to send. Book a consultation first.")
                                             }
+                                        },
+                                        variant = BtnVariant.PRIMARY,
+                                        modifier = Modifier.weight(1f).height(36.dp)
+                                    )
+                                    CareButton(
+                                        text = "Call Chemist",
+                                        onClick = { viewModel.showToast("Calling ${chemist.name} at ${chemist.phone}...") },
+                                        variant = BtnVariant.OUTLINE,
+                                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                                        modifier = Modifier.height(36.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            2 -> {
+                // Tab 2: Orders & Deliveries Tracker
+                if (chemistOrders.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.LocalShipping, contentDescription = null, tint = TeleMuted, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("No prescription orders yet", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Fulfill an active prescription to track dispensing and delivery.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(14.dp))
+                            CareButton(
+                                text = "View Active Prescriptions",
+                                onClick = { selectedTab = 0 },
+                                variant = BtnVariant.SOFT,
+                                modifier = Modifier.height(38.dp)
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        items(chemistOrders) { order ->
+                            CareCard {
+                                // Order ID and status badge
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text("Order #${order.id}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text("${order.orderDate} · ${order.deliveryType}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    val statusColor = when (order.fulfillmentStatus) {
+                                        "Delivered" -> TeleSuccess
+                                        "Out for Delivery", "Ready for Pickup" -> TeleAccent
+                                        else -> TelePrimary
+                                    }
+                                    val statusBg = when (order.fulfillmentStatus) {
+                                        "Delivered" -> TeleSuccessSoft
+                                        "Out for Delivery", "Ready for Pickup" -> TeleAccentSoft
+                                        else -> TelePrimarySoft
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(statusBg)
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(order.fulfillmentStatus, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = statusColor)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Chemist and medicines info
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Storefront, contentDescription = null, tint = TelePrimary, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(order.chemistName, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("(${order.patientPhone})", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Meds: ${order.medicationsSummary}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Address: ${order.deliveryAddress}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Delivery Pipeline Progress Stepper
+                                val steps = listOf("Sent to Chemist", "Preparing", "Out for Delivery", "Delivered")
+                                val currentStepIndex = when (order.fulfillmentStatus) {
+                                    "Sent to Chemist" -> 0
+                                    "Preparing" -> 1
+                                    "Out for Delivery", "Ready for Pickup" -> 2
+                                    "Delivered" -> 3
+                                    else -> 0
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    steps.forEachIndexed { idx, stepName ->
+                                        val isPassed = idx <= currentStepIndex
+                                        val isCurrent = idx == currentStepIndex
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(20.dp)
+                                                    .clip(CircleShape)
+                                                    .background(if (isPassed) TeleSuccess else TeleMuted),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (isPassed) {
+                                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = stepName,
+                                                fontSize = 9.sp,
+                                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (isCurrent) TelePrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1
+                                            )
                                         }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "Total Paid: ${CareData.formatKES(order.totalAmount.toInt())} (${order.paymentMethod})",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = TelePrimary
+                                    )
+                                    if (order.fulfillmentStatus != "Delivered") {
+                                        CareButton(
+                                            text = "Cancel",
+                                            onClick = { viewModel.cancelChemistOrder(order.id) },
+                                            variant = BtnVariant.OUTLINE,
+                                            modifier = Modifier.height(30.dp)
+                                        )
                                     }
                                 }
                             }
@@ -906,6 +1398,197 @@ fun MedsScreen(viewModel: CareViewModel) {
                 }
             }
         }
+    }
+
+    // Modal: Fulfill Prescription with Chemist & Pay
+    prescriptionToFulfill?.let { p ->
+        var chosenChemistId by remember { mutableStateOf(chemists.firstOrNull()?.id ?: "") }
+        var chosenDeliveryType by remember { mutableStateOf("Home Delivery") } // "Home Delivery" or "Counter Pickup"
+        var deliveryAddressInput by remember { mutableStateOf("Nairobi CBD, Kenya") }
+        var chosenPaymentMethod by remember { mutableStateOf("M-Pesa") } // "M-Pesa", "Health Wallet", "Card"
+
+        val selectedChemist = chemists.find { it.id == chosenChemistId } ?: chemists.firstOrNull()
+        val estimatedMedsPrice = 1850.0
+        val deliveryFee = if (chosenDeliveryType == "Home Delivery") (selectedChemist?.deliveryFee ?: 150.0) else 0.0
+        val totalAmount = estimatedMedsPrice + deliveryFee
+
+        AlertDialog(
+            onDismissRequest = { prescriptionToFulfill = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.LocalPharmacy, contentDescription = null, tint = TelePrimary, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Fulfill Prescription & Pay", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    item {
+                        Text("Prescription for ${p.diagnosis}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("Prescribed items: ${p.meds.joinToString { "${it.name} (${it.dose})" }}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
+                    item {
+                        Text("1. Select Certified Chemist:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            chemists.forEach { c ->
+                                val isSelected = c.id == chosenChemistId
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) TelePrimarySoft else MaterialTheme.colorScheme.surface)
+                                        .border(1.dp, if (isSelected) TelePrimary else TeleBorder, RoundedCornerShape(8.dp))
+                                        .clickable { chosenChemistId = c.id }
+                                        .padding(8.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        RadioButton(
+                                            selected = isSelected,
+                                            onClick = { chosenChemistId = c.id },
+                                            colors = RadioButtonDefaults.colors(selectedColor = TelePrimary)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(c.name, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            Text("${c.address} · ★ ${c.rating} · Delivery fee: ${CareData.formatKES(c.deliveryFee.toInt())}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Text("2. Delivery Method:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("Home Delivery", "Counter Pickup").forEach { type ->
+                                val isSelected = chosenDeliveryType == type
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) TelePrimary else MaterialTheme.colorScheme.surface)
+                                        .border(1.dp, if (isSelected) TelePrimary else TeleBorder, RoundedCornerShape(8.dp))
+                                        .clickable { chosenDeliveryType = type }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = type,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (chosenDeliveryType == "Home Delivery") {
+                        item {
+                            OutlinedTextField(
+                                value = deliveryAddressInput,
+                                onValueChange = { deliveryAddressInput = it },
+                                label = { Text("Delivery Address", fontSize = 11.sp) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+                    }
+
+                    item {
+                        Text("3. Payment Method:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("M-Pesa", "Health Wallet", "Card").forEach { method ->
+                                val isSelected = chosenPaymentMethod == method
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) TelePrimary else MaterialTheme.colorScheme.surface)
+                                        .border(1.dp, if (isSelected) TelePrimary else TeleBorder, RoundedCornerShape(8.dp))
+                                        .clickable { chosenPaymentMethod = method }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = method,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(10.dp)
+                        ) {
+                            Column {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Medications Estimate:", fontSize = 11.sp)
+                                    Text(CareData.formatKES(estimatedMedsPrice.toInt()), fontSize = 11.sp)
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Delivery Fee:", fontSize = 11.sp)
+                                    Text(CareData.formatKES(deliveryFee.toInt()), fontSize = 11.sp)
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Total to Pay:", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Text(CareData.formatKES(totalAmount.toInt()), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TelePrimary)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                CareButton(
+                    text = "Pay & Fulfill (${CareData.formatKES(totalAmount.toInt())})",
+                    onClick = {
+                        val result = viewModel.fulfillPrescriptionWithChemist(
+                            prescriptionId = p.id,
+                            chemistId = chosenChemistId,
+                            deliveryType = chosenDeliveryType,
+                            deliveryAddress = if (chosenDeliveryType == "Home Delivery") deliveryAddressInput else "Counter Pickup",
+                            paymentMethod = chosenPaymentMethod
+                        )
+                        if (result != null) {
+                            prescriptionToFulfill = null
+                            selectedTab = 2 // Switch to Orders tab to view progress
+                        }
+                    },
+                    variant = BtnVariant.PRIMARY,
+                    modifier = Modifier.height(38.dp).testTag("confirm_fulfill_rx_btn")
+                )
+            },
+            dismissButton = {
+                CareButton(
+                    text = "Cancel",
+                    onClick = { prescriptionToFulfill = null },
+                    variant = BtnVariant.OUTLINE,
+                    modifier = Modifier.height(38.dp)
+                )
+            }
+        )
+    }
+
+    if (showEncryptionModal) {
+        DataEncryptionInfoModal(
+            onDismiss = { showEncryptionModal = false }
+        )
     }
 }
 
@@ -1084,6 +1767,7 @@ fun ChatScreen(
 fun RecordsScreen(viewModel: CareViewModel) {
     val records by viewModel.records.collectAsState()
     var selectedKind by remember { mutableStateOf("Lab result") }
+    var showEncryptionModal by remember { mutableStateOf(false) }
 
     BackHandler {
         viewModel.navigateBack()
@@ -1161,11 +1845,41 @@ fun RecordsScreen(viewModel: CareViewModel) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(r.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             Text("${r.kind} · ${r.size} · ${r.date}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (!r.icd11Code.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = "ICD-11: ${r.icd11Code} · ${r.icd11Title ?: ""}",
+                                    fontSize = 10.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    color = TelePrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        // Encryption Tag
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(TeleSuccessSoft)
+                                .clickable { showEncryptionModal = true }
+                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = TeleSuccess, modifier = Modifier.size(10.dp))
+                                Text("AES-256", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TeleSuccess)
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    if (showEncryptionModal) {
+        DataEncryptionInfoModal(
+            onDismiss = { showEncryptionModal = false }
+        )
     }
 }
 
@@ -1247,34 +1961,16 @@ fun ProfileScreen(viewModel: CareViewModel) {
                 }
             }
 
-            item {
-                val videoSdkOrgName by viewModel.videoSdkOrgName.collectAsState()
-                CareCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Videocam, contentDescription = null, tint = TelePrimary, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("VideoSDK HD Telehealth", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("Encrypted via $videoSdkOrgName · WebRTC DTLS-SRTP", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(TeleSuccessSoft)
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text("Ready", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TeleSuccess)
-                        }
-                    }
-                }
-            }
 
             item {
                 CareCard(onClick = { viewModel.setRole(null) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = TelePrimary, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text("Switch role", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Column {
+                            Text("Switch Portal / Role", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Switch between Patient, Clinician, or Medical Facility", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }

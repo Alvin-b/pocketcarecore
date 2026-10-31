@@ -21,6 +21,9 @@ data class UteWatchSummary(
     val stepsToday: Int? = null,
     val heartRateBpm: Int? = null,
     val heartRateMeasuredAt: String? = null,
+    val bloodPressureSystolic: Int? = null,
+    val bloodPressureDiastolic: Int? = null,
+    val bloodPressureMeasuredAt: String? = null,
     val oxygenPercent: Int? = null,
     val oxygenMeasuredAt: String? = null,
     val sleepMinutes: Int? = null,
@@ -57,6 +60,10 @@ object UteWatchMetricsMapper {
             .filter { it.oxygenValue > 0 }
             .maxByOrNull { it.calendarTime.orEmpty() }
 
+        val latestBp = fitnessData.bpData.orEmpty()
+            .filter { it.systolicPressure > 0 && it.diastolicPressure > 0 }
+            .maxByOrNull { it.calendarTime.orEmpty() }
+
         val sleepByDate = sleepData
             .filter { it.sleepTime > 0 && it.sleepType in SLEEP_STAGES }
             .groupBy { it.calendar.orEmpty() }
@@ -70,6 +77,9 @@ object UteWatchMetricsMapper {
             stepsToday = todaySteps.takeIf { it.isNotEmpty() }?.sumOf { it.step },
             heartRateBpm = latestHeartRate?.let { it.rate.takeIf { rate -> rate > 0 } ?: it.heartRateAvg },
             heartRateMeasuredAt = latestHeartRate?.calendarTime,
+            bloodPressureSystolic = latestBp?.systolicPressure,
+            bloodPressureDiastolic = latestBp?.diastolicPressure,
+            bloodPressureMeasuredAt = latestBp?.calendarTime,
             oxygenPercent = latestOxygen?.oxygenValue,
             oxygenMeasuredAt = latestOxygen?.calendarTime,
             sleepMinutes = latestSleepMinutes,

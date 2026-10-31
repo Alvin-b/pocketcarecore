@@ -17,11 +17,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalPharmacy
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,32 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.CareScreen
 import com.example.ui.CareViewModel
-import com.example.ui.screens.AppointmentsScreen
-import com.example.ui.screens.BookAppointmentScreen
-import com.example.ui.screens.CallConsultationScreen
-import com.example.ui.screens.ChatScreen
-import com.example.ui.screens.ChatsListScreen
-import com.example.ui.screens.DocEarningsScreen
-import com.example.ui.screens.DocHomeScreen
-import com.example.ui.screens.DocPatientChartScreen
-import com.example.ui.screens.DocPatientsScreen
-import com.example.ui.screens.DocPrescribeScreen
-import com.example.ui.screens.DocRegisterScreen
-import com.example.ui.screens.DocScheduleScreen
-import com.example.ui.screens.DocSettingsScreen
-import com.example.ui.screens.DoctorProfileScreen
-import com.example.ui.screens.DoctorsListScreen
-import com.example.ui.screens.LabsScreen
-import com.example.ui.screens.MedsScreen
-import com.example.ui.screens.PatientHomeScreen
-import com.example.ui.screens.PaymentScreen
-import com.example.ui.screens.ProfileScreen
-import com.example.ui.screens.RateScreen
-import com.example.ui.screens.RecordsScreen
-import com.example.ui.screens.TriageScreen
-import com.example.ui.screens.VitalsScreen
-import com.example.ui.screens.WalletScreen
-import com.example.ui.screens.WelcomeScreen
+import com.example.ui.screens.*
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.TelePrimary
 import com.example.ui.theme.TelePrimarySoft
@@ -119,7 +97,15 @@ fun CareConnectApp(viewModel: CareViewModel) {
             currentScreen is CareScreen.DocSettings
     )
 
-    val showTabs = isRootPatientTab || isRootDoctorTab
+    val isRootFacilityTab = role == "facility" && (
+            currentScreen is CareScreen.FacilityHome ||
+            currentScreen is CareScreen.FacilityStaff ||
+            currentScreen is CareScreen.FacilityPharmacy ||
+            currentScreen is CareScreen.FacilityLabs ||
+            currentScreen is CareScreen.FacilitySettings
+    )
+
+    val showTabs = isRootPatientTab || isRootDoctorTab || isRootFacilityTab
 
     BackHandler(enabled = screenStack.size > 1) {
         viewModel.navigateBack()
@@ -265,6 +251,67 @@ fun CareConnectApp(viewModel: CareViewModel) {
                             ),
                             modifier = Modifier.testTag("tab_doc_practice")
                         )
+                    } else if (role == "facility") {
+                        NavigationBarItem(
+                            selected = currentScreen is CareScreen.FacilityHome,
+                            onClick = { viewModel.navigateTo(CareScreen.FacilityHome) },
+                            icon = { Icon(Icons.Default.Apartment, contentDescription = "Facility") },
+                            label = { Text("Facility", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = TelePrimarySoft,
+                                selectedIconColor = TelePrimary,
+                                selectedTextColor = TelePrimary
+                            ),
+                            modifier = Modifier.testTag("tab_fac_home")
+                        )
+                        NavigationBarItem(
+                            selected = currentScreen is CareScreen.FacilityStaff,
+                            onClick = { viewModel.navigateTo(CareScreen.FacilityStaff) },
+                            icon = { Icon(Icons.Default.Person, contentDescription = "Staff") },
+                            label = { Text("Staff", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = TelePrimarySoft,
+                                selectedIconColor = TelePrimary,
+                                selectedTextColor = TelePrimary
+                            ),
+                            modifier = Modifier.testTag("tab_fac_staff")
+                        )
+                        NavigationBarItem(
+                            selected = currentScreen is CareScreen.FacilityPharmacy,
+                            onClick = { viewModel.navigateTo(CareScreen.FacilityPharmacy) },
+                            icon = { Icon(Icons.Default.LocalPharmacy, contentDescription = "Pharmacy") },
+                            label = { Text("Pharmacy", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = TelePrimarySoft,
+                                selectedIconColor = TelePrimary,
+                                selectedTextColor = TelePrimary
+                            ),
+                            modifier = Modifier.testTag("tab_fac_pharmacy")
+                        )
+                        NavigationBarItem(
+                            selected = currentScreen is CareScreen.FacilityLabs,
+                            onClick = { viewModel.navigateTo(CareScreen.FacilityLabs) },
+                            icon = { Icon(Icons.Default.Science, contentDescription = "Labs") },
+                            label = { Text("Labs", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = TelePrimarySoft,
+                                selectedIconColor = TelePrimary,
+                                selectedTextColor = TelePrimary
+                            ),
+                            modifier = Modifier.testTag("tab_fac_labs")
+                        )
+                        NavigationBarItem(
+                            selected = currentScreen is CareScreen.FacilitySettings,
+                            onClick = { viewModel.navigateTo(CareScreen.FacilitySettings) },
+                            icon = { Icon(Icons.Default.Settings, contentDescription = "Admin") },
+                            label = { Text("Admin", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = TelePrimarySoft,
+                                selectedIconColor = TelePrimary,
+                                selectedTextColor = TelePrimary
+                            ),
+                            modifier = Modifier.testTag("tab_fac_settings")
+                        )
                     }
                 }
             }
@@ -275,11 +322,12 @@ fun CareConnectApp(viewModel: CareViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .then(
-                    if (currentScreen is CareScreen.Welcome || currentScreen is CareScreen.Call) Modifier
+                    if (currentScreen is CareScreen.Login || currentScreen is CareScreen.Welcome || currentScreen is CareScreen.Call) Modifier
                     else Modifier.windowInsetsPadding(WindowInsets.statusBars)
                 )
         ) {
             when (val s = currentScreen) {
+                is CareScreen.Login -> LoginScreen(viewModel = viewModel)
                 is CareScreen.Welcome -> WelcomeScreen(viewModel = viewModel)
                 is CareScreen.Home -> PatientHomeScreen(viewModel = viewModel)
                 is CareScreen.Doctors -> DoctorsListScreen(viewModel = viewModel, initialSpecialty = s.specialty)
@@ -313,6 +361,18 @@ fun CareConnectApp(viewModel: CareViewModel) {
                 is CareScreen.Wallet -> WalletScreen(viewModel = viewModel)
                 is CareScreen.DocEarnings -> DocEarningsScreen(viewModel = viewModel)
                 is CareScreen.DocSchedule -> DocScheduleScreen(viewModel = viewModel)
+                is CareScreen.FacilityHome -> FacilityHomeScreen(viewModel = viewModel)
+                is CareScreen.FacilityDepartments -> FacilityDepartmentsScreen(viewModel = viewModel)
+                is CareScreen.FacilityReferrals -> FacilityReferralsScreen(viewModel = viewModel)
+                is CareScreen.FacilityProcedures -> FacilityProceduresScreen(viewModel = viewModel)
+                is CareScreen.FacilityFollowUps -> FacilityFollowUpsScreen(viewModel = viewModel)
+                is CareScreen.FacilityWards -> FacilityWardsScreen(viewModel = viewModel)
+                is CareScreen.FacilityBookCare -> FacilityBookCareScreen(viewModel = viewModel, preselectedDeptId = s.preselectedDeptId)
+                is CareScreen.FacilityProfile -> FacilityProfileScreen(viewModel = viewModel, facilityId = s.facilityId)
+                is CareScreen.FacilityStaff -> FacilityStaffScreen(viewModel = viewModel)
+                is CareScreen.FacilityPharmacy -> FacilityPharmacyScreen(viewModel = viewModel)
+                is CareScreen.FacilityLabs -> FacilityLabsScreen(viewModel = viewModel)
+                is CareScreen.FacilitySettings -> FacilitySettingsScreen(viewModel = viewModel)
             }
         }
     }
